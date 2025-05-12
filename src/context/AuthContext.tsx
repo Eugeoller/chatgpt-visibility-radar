@@ -60,6 +60,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signUp = async (email: string, password: string, fullName: string) => {
     try {
+      console.log("SignUp called with fullName:", fullName);
+      
       const { error } = await supabase.auth.signUp({
         email,
         password,
@@ -77,6 +79,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         description: "Te hemos enviado un email de confirmación.",
       });
     } catch (error: any) {
+      console.error("SignUp error:", error);
       toast({
         title: "Error al crear cuenta",
         description: error.message,

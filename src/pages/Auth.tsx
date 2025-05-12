@@ -1,6 +1,6 @@
 
-import { useState } from "react";
-import { Navigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -35,7 +35,13 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 type SignupFormValues = z.infer<typeof signupSchema>;
 
 const Auth = () => {
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [searchParams] = useSearchParams();
+  const returnUrl = searchParams.get("returnUrl") || "/";
+  const isFromReport = returnUrl.includes("/informe");
+  
+  // Initialize mode based on where the user is coming from
+  const [mode, setMode] = useState<"login" | "signup">(isFromReport ? "signup" : "login");
+  
   const { signIn, signUp, user, loading } = useAuth();
   
   const loginForm = useForm<LoginFormValues>({
@@ -61,8 +67,14 @@ const Auth = () => {
   };
 
   const onSignupSubmit = async (values: SignupFormValues) => {
+    console.log("Signup form submitted with values:", values);
     await signUp(values.email, values.password, values.fullName);
   };
+
+  // Log form state for debugging
+  useEffect(() => {
+    console.log("Signup form state:", signupForm.formState);
+  }, [signupForm.formState]);
 
   if (loading) {
     return (
@@ -73,7 +85,8 @@ const Auth = () => {
   }
   
   if (user) {
-    return <Navigate to="/" replace />;
+    // Redirect to the return URL or home page if authenticated
+    return <Navigate to={returnUrl} replace />;
   }
 
   return (
