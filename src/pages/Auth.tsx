@@ -1,38 +1,12 @@
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-
 import { useAuth } from "@/context/AuthContext";
-import { Button } from "@/components/ui/button";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import Logo from "@/components/Logo";
-
-const loginSchema = z.object({
-  email: z.string().email("Email inválido"),
-  password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
-});
-
-const signupSchema = loginSchema.extend({
-  fullName: z.string().min(2, "El nombre debe tener al menos 2 caracteres"),
-  confirmPassword: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Las contraseñas no coinciden",
-  path: ["confirmPassword"],
-});
-
-type LoginFormValues = z.infer<typeof loginSchema>;
-type SignupFormValues = z.infer<typeof signupSchema>;
+import LoginForm from "@/components/auth/LoginForm";
+import SignupForm from "@/components/auth/SignupForm";
+import AuthLoading from "@/components/auth/AuthLoading";
+import { LoginFormValues, SignupFormValues } from "@/schemas/authSchemas";
 
 const Auth = () => {
   const [searchParams] = useSearchParams();
@@ -44,44 +18,20 @@ const Auth = () => {
   
   const { signIn, signUp, user, loading } = useAuth();
   
-  const loginForm = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-    },
-  });
-
-  const signupForm = useForm<SignupFormValues>({
-    resolver: zodResolver(signupSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-      confirmPassword: "",
-      fullName: "",
-    },
-  });
-
   const onLoginSubmit = async (values: LoginFormValues) => {
     await signIn(values.email, values.password);
   };
 
   const onSignupSubmit = async (values: SignupFormValues) => {
-    console.log("Signup form submitted with values:", values);
     await signUp(values.email, values.password, values.fullName);
   };
 
-  // Log form state for debugging
-  useEffect(() => {
-    console.log("Signup form state:", signupForm.formState);
-  }, [signupForm.formState]);
+  const toggleMode = () => {
+    setMode(mode === "login" ? "signup" : "login");
+  };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-bright"></div>
-      </div>
-    );
+    return <AuthLoading />;
   }
   
   if (user) {
@@ -109,121 +59,9 @@ const Auth = () => {
           </div>
 
           {mode === "login" ? (
-            <>
-              <Form {...loginForm}>
-                <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-5">
-                  <FormField
-                    control={loginForm.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email</FormLabel>
-                        <FormControl>
-                          <Input placeholder="tu@email.com" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={loginForm.control}
-                    name="password"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Contraseña</FormLabel>
-                        <FormControl>
-                          <Input type="password" placeholder="••••••" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <Button type="submit" className="w-full bg-blue-bright hover:bg-blue-700">
-                    Iniciar sesión
-                  </Button>
-                </form>
-              </Form>
-              <p className="text-center mt-4 text-sm text-gray-600">
-                ¿No tienes una cuenta?{" "}
-                <button
-                  onClick={() => setMode("signup")}
-                  className="text-blue-bright hover:underline font-medium"
-                >
-                  Crear cuenta
-                </button>
-              </p>
-            </>
+            <LoginForm onSubmit={onLoginSubmit} onSwitchMode={toggleMode} />
           ) : (
-            <>
-              <Form {...signupForm}>
-                <form onSubmit={signupForm.handleSubmit(onSignupSubmit)} className="space-y-4">
-                  <FormField
-                    control={signupForm.control}
-                    name="fullName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Nombre completo</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Nombre completo" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={signupForm.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email</FormLabel>
-                        <FormControl>
-                          <Input placeholder="tu@email.com" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={signupForm.control}
-                    name="password"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Contraseña</FormLabel>
-                        <FormControl>
-                          <Input type="password" placeholder="••••••" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={signupForm.control}
-                    name="confirmPassword"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Confirmar contraseña</FormLabel>
-                        <FormControl>
-                          <Input type="password" placeholder="••••••" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <Button type="submit" className="w-full bg-blue-bright hover:bg-blue-700">
-                    Crear cuenta
-                  </Button>
-                </form>
-              </Form>
-              <p className="text-center mt-4 text-sm text-gray-600">
-                ¿Ya tienes una cuenta?{" "}
-                <button
-                  onClick={() => setMode("login")}
-                  className="text-blue-bright hover:underline font-medium"
-                >
-                  Iniciar sesión
-                </button>
-              </p>
-            </>
+            <SignupForm onSubmit={onSignupSubmit} onSwitchMode={toggleMode} />
           )}
         </div>
       </div>
