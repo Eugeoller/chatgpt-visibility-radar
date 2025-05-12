@@ -9,6 +9,8 @@ import NotFound from "./pages/NotFound";
 import ReportRequest from "./pages/ReportRequest";
 import Auth from "./pages/Auth";
 import { AuthProvider } from "./context/AuthContext";
+import PrivateRoute from "./components/PrivateRoute";
+import ReportFormPage from "./pages/ReportFormPage";
 
 const queryClient = new QueryClient();
 
@@ -23,6 +25,14 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/informe" element={<ReportRequest />} />
             <Route path="/auth" element={<Auth />} />
+            
+            {/* Protected Routes */}
+            <Route path="/informe/formulario" element={
+              <PrivateRoute requiresPayment={true}>
+                <ReportFormPage />
+              </PrivateRoute>
+            } />
+            
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

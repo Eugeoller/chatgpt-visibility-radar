@@ -1,7 +1,12 @@
 
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CheckCircle2, ShieldCheck, Star, Lock, AlertCircle } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const benefits = [
   "+100 preguntas personalizadas",
@@ -20,6 +25,57 @@ const testimonials = [
 ];
 
 const OfferBlock = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+
+  const handlePurchaseClick = async () => {
+    if (!user) {
+      // Redirect to login page with a return URL
+      navigate(`/auth?returnUrl=${encodeURIComponent('/informe')}`);
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // First check if user already has a paid order
+      const { data: checkData, error: checkError } = await supabase.functions.invoke('verify-session', {
+        body: { sessionId: null }
+      });
+
+      if (checkError) {
+        throw new Error('Error checking payment status');
+      }
+
+      // If user already has paid, redirect to form
+      if (checkData.hasPaid) {
+        toast.info('Ya has adquirido este informe');
+        navigate('/informe/formulario');
+        return;
+      }
+
+      // Create checkout session
+      const { data, error } = await supabase.functions.invoke('create-checkout', {});
+
+      if (error) {
+        throw new Error(`Error creating checkout session: ${error.message}`);
+      }
+
+      if (data.url) {
+        // Redirect to Stripe checkout
+        window.location.href = data.url;
+      } else {
+        throw new Error('No checkout URL returned');
+      }
+    } catch (error) {
+      console.error('Error during checkout process:', error);
+      toast.error('Ha ocurrido un error al procesar tu solicitud. Por favor inténtalo de nuevo.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <section className="py-20 pt-10 bg-gradient-to-b from-gray-50 to-white">
       <div className="container-custom max-w-4xl">
@@ -89,8 +145,19 @@ const OfferBlock = () => {
                 </div>
                 <p className="text-5xl font-bold text-navy mb-1">49 €</p>
                 <p className="text-sm text-gray-500 mb-6">(pago único)</p>
-                <Button className="btn-primary text-lg w-full md:w-auto md:px-12 py-6 mb-4">
-                  Obtener mi informe ahora por 49€
+                <Button 
+                  className="btn-primary text-lg w-full md:w-auto md:px-12 py-6 mb-4"
+                  onClick={handlePurchaseClick}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white mr-2"></div>
+                      Procesando...
+                    </>
+                  ) : (
+                    "Obtener mi informe ahora por 49€"
+                  )}
                 </Button>
                 
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-4">
