@@ -1,6 +1,7 @@
 
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const CtaSection = () => {
   return (
@@ -27,9 +28,11 @@ const CtaSection = () => {
           que millones consultan cada día.
         </p>
         <div className="space-y-6">
-          <Button className="btn-primary text-lg w-full sm:w-auto px-8 py-6 flex items-center justify-center gap-2 mx-auto">
-            Solicitar Informe Ahora
-            <ArrowRight className="h-5 w-5" />
+          <Button className="btn-primary text-lg w-full sm:w-auto px-8 py-6 flex items-center justify-center gap-2 mx-auto" asChild>
+            <Link to="/informe">
+              Solicitar Informe Ahora
+              <ArrowRight className="h-5 w-5" />
+            </Link>
           </Button>
           <p className="text-gray-400 text-sm">
             Ya hemos analizado más de 1.200 prompts reales en ChatGPT.

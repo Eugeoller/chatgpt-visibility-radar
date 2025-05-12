@@ -1,6 +1,7 @@
 
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const HeroSection = () => {
   return (
@@ -16,9 +17,11 @@ const HeroSection = () => {
               Descúbrelo antes que tu competencia y empieza a ganar visibilidad en la IA que todos consultan.
             </p>
             <div className="pt-4 flex justify-center">
-              <Button className="btn-primary text-lg flex items-center gap-2 px-8 py-6">
-                🔍 Quiero saber si aparezco
-                <ArrowRight className="h-5 w-5" />
+              <Button className="btn-primary text-lg flex items-center gap-2 px-8 py-6" asChild>
+                <Link to="/informe">
+                  🔍 Quiero saber si aparezco
+                  <ArrowRight className="h-5 w-5" />
+                </Link>
               </Button>
             </div>
           </div>
