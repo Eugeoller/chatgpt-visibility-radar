@@ -28,7 +28,7 @@ const CtaSection = () => {
         </p>
         <div className="space-y-6">
           <Button className="btn-primary text-lg w-full sm:w-auto px-8 py-6 flex items-center justify-center gap-2 mx-auto">
-            Ver opciones y solicitar informe
+            Solicitar Informe Ahora
             <ArrowRight className="h-5 w-5" />
           </Button>
           <p className="text-gray-400 text-sm">

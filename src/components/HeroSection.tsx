@@ -15,14 +15,11 @@ const HeroSection = () => {
             <p className="text-lg md:text-xl text-gray-300 max-w-2xl mx-auto">
               Descúbrelo antes que tu competencia y empieza a ganar visibilidad en la IA que todos consultan.
             </p>
-            <div className="space-y-3 pt-4">
+            <div className="pt-4">
               <Button className="btn-primary text-lg flex items-center gap-2 px-8 py-6">
                 🔍 Quiero saber si aparezco
                 <ArrowRight className="h-5 w-5" />
               </Button>
-              <p className="text-sm text-gray-400">
-                Recibe tu informe completo por solo 29 €
-              </p>
             </div>
           </div>
           <div className="max-w-lg">

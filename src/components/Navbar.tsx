@@ -10,17 +10,6 @@ const Navbar = () => {
           <Link to="/" className="text-white font-bold text-xl">
             SeoChatGPT
           </Link>
-          <nav className="hidden md:flex items-center space-x-8">
-            <Link to="#" className="text-gray-300 hover:text-white transition-colors">
-              Informe
-            </Link>
-            <Link to="#" className="text-gray-300 hover:text-white transition-colors">
-              Casos de uso
-            </Link>
-            <Link to="#" className="text-gray-300 hover:text-white transition-colors">
-              Precios
-            </Link>
-          </nav>
           <Button className="bg-transparent hover:bg-white/10 text-white border border-white/20">
             Iniciar sesión
           </Button>
