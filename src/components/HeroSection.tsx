@@ -26,7 +26,7 @@ const HeroSection = () => {
             <div className="relative animate-float">
               <img
                 src="/seo-chatgpt-hero.png"
-                alt="Radar con marcas en ChatGPT"
+                alt=""
                 className="w-full h-auto"
               />
             </div>
