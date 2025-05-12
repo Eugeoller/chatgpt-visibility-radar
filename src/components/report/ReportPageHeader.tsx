@@ -3,7 +3,7 @@ import React from 'react';
 
 const ReportPageHeader = () => {
   return (
-    <header className="bg-navy/90 backdrop-blur-sm py-4 border-b border-white/10">
+    <header className="bg-navy py-4 border-b border-white/10">
       <div className="container-custom">
         <div className="flex items-center justify-center">
           <span className="text-2xl font-extrabold text-white">

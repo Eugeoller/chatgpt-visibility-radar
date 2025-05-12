@@ -1,6 +1,5 @@
 
-import { Button } from "@/components/ui/button";
-import { ArrowRight } from "lucide-react";
+import { ArrowDown } from "lucide-react";
 
 const ReportHero = () => {
   return (
@@ -16,10 +15,8 @@ const ReportHero = () => {
             en ChatGPT, y te damos un plan personalizado para mejorar tu posición.
           </p>
           <div className="pt-4">
-            <Button className="btn-primary text-lg flex items-center gap-2 px-8 py-6">
-              Solicitar mi informe ahora
-              <ArrowRight className="h-5 w-5" />
-            </Button>
+            <ArrowDown className="h-10 w-10 text-blue-bright animate-bounce" />
+            <p className="text-gray-300 mt-2">Descubre todo lo que incluye</p>
           </div>
         </div>
       </div>
