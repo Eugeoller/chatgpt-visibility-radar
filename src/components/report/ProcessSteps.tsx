@@ -50,7 +50,7 @@ const steps = [
 
 const ProcessSteps = () => {
   return (
-    <section className="py-20 bg-gray-50">
+    <section className="py-16 pb-10 bg-gray-50">
       <div className="container-custom">
         <div className="text-center mb-12">
           <h2 className="heading-lg text-navy mb-4">Nuestro proceso paso a paso</h2>

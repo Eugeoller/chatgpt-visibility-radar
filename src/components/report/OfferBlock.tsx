@@ -21,7 +21,7 @@ const testimonials = [
 
 const OfferBlock = () => {
   return (
-    <section className="py-24 bg-gradient-to-b from-gray-50 to-white">
+    <section className="py-20 pt-10 bg-gradient-to-b from-gray-50 to-white">
       <div className="container-custom max-w-4xl">
         <div className="text-center mb-12">
           <h2 className="heading-lg text-navy mb-4">Obtén tu informe de visibilidad en ChatGPT</h2>
