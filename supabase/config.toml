@@ -46,3 +46,5 @@ verify_jwt = true
 [functions.generar-reporte-chatgpt]
 verify_jwt = true
 
+[functions.generar-reporte-chatgpt-v2]
+verify_jwt = true
