@@ -155,9 +155,23 @@ const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }
           </>
         )}
         {status === "ready" && (
-          <p className="text-sm text-gray-600">
-            Tu informe está listo para descargar.
-          </p>
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Tu informe está listo para descargar.
+            </p>
+            
+            {report.pdf_url && (
+              <Button 
+                onClick={handleDownload}
+                variant="outline"
+                className="w-full mt-2"
+                size="sm"
+              >
+                <DownloadIcon className="h-4 w-4 mr-2" />
+                Descargar informe
+              </Button>
+            )}
+          </div>
         )}
       </CardContent>
       <CardFooter className="flex flex-col gap-2">
@@ -199,23 +213,13 @@ const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }
         )}
         
         {status === "ready" && report.pdf_url && (
-          <div className="w-full space-y-2">
-            <Button 
-              onClick={() => window.open(report.pdf_url!, "_blank")}
-              className="w-full"
-            >
-              <FileIcon className="h-4 w-4 mr-2" />
-              Ver informe
-            </Button>
-            <Button 
-              onClick={handleDownload}
-              variant="outline"
-              className="w-full"
-            >
-              <DownloadIcon className="h-4 w-4 mr-2" />
-              Descargar informe
-            </Button>
-          </div>
+          <Button 
+            onClick={() => window.open(report.pdf_url!, "_blank")}
+            className="w-full"
+          >
+            <FileIcon className="h-4 w-4 mr-2" />
+            Ver informe
+          </Button>
         )}
       </CardFooter>
     </Card>
