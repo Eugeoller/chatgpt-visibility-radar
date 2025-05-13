@@ -11,6 +11,7 @@ import Auth from "./pages/Auth";
 import { AuthProvider } from "./context/AuthContext";
 import PrivateRoute from "./components/PrivateRoute";
 import ReportFormPage from "./pages/ReportFormPage";
+import ReportsPage from "./pages/ReportsPage";
 
 const queryClient = new QueryClient();
 
@@ -30,6 +31,11 @@ const App = () => (
             <Route path="/informe/formulario" element={
               <PrivateRoute requiresPayment={true}>
                 <ReportFormPage />
+              </PrivateRoute>
+            } />
+            <Route path="/informes" element={
+              <PrivateRoute requiresPayment={true}>
+                <ReportsPage />
               </PrivateRoute>
             } />
             

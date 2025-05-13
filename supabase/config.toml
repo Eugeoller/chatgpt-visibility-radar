@@ -42,3 +42,7 @@ verify_jwt = true
 
 [functions.verify-session]
 verify_jwt = true
+
+[functions.generar-reporte-chatgpt]
+verify_jwt = true
+

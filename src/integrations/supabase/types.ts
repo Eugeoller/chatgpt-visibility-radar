@@ -9,6 +9,124 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      batch_summaries: {
+        Row: {
+          batch_id: string
+          created_at: string
+          id: string
+          summary_json: Json
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string
+          id?: string
+          summary_json: Json
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string
+          id?: string
+          summary_json?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batch_summaries_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "prompt_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      brand_questionnaires: {
+        Row: {
+          aliases: string[] | null
+          brand_name: string
+          competitors: string[]
+          created_at: string
+          error_message: string | null
+          id: string
+          sector: string | null
+          status: string
+          updated_at: string
+          user_id: string
+          website: string | null
+        }
+        Insert: {
+          aliases?: string[] | null
+          brand_name: string
+          competitors: string[]
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          sector?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+          website?: string | null
+        }
+        Update: {
+          aliases?: string[] | null
+          brand_name?: string
+          competitors?: string[]
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          sector?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
+      final_reports: {
+        Row: {
+          cost_alert: boolean | null
+          cost_eur: number | null
+          created_at: string
+          id: string
+          pdf_url: string | null
+          questionnaire_id: string
+          status: string
+          summary_json: Json | null
+          total_tokens: number | null
+          updated_at: string
+        }
+        Insert: {
+          cost_alert?: boolean | null
+          cost_eur?: number | null
+          created_at?: string
+          id?: string
+          pdf_url?: string | null
+          questionnaire_id: string
+          status?: string
+          summary_json?: Json | null
+          total_tokens?: number | null
+          updated_at?: string
+        }
+        Update: {
+          cost_alert?: boolean | null
+          cost_eur?: number | null
+          created_at?: string
+          id?: string
+          pdf_url?: string | null
+          questionnaire_id?: string
+          status?: string
+          summary_json?: Json | null
+          total_tokens?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "final_reports_questionnaire_id_fkey"
+            columns: ["questionnaire_id"]
+            isOneToOne: true
+            referencedRelation: "brand_questionnaires"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orders: {
         Row: {
           amount: number
@@ -72,6 +190,88 @@ export type Database = {
         }
         Relationships: []
       }
+      prompt_batches: {
+        Row: {
+          batch_number: number
+          created_at: string
+          error_message: string | null
+          id: string
+          questionnaire_id: string
+          questions: Json
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          batch_number: number
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          questionnaire_id: string
+          questions: Json
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          batch_number?: number
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          questionnaire_id?: string
+          questions?: Json
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prompt_batches_questionnaire_id_fkey"
+            columns: ["questionnaire_id"]
+            isOneToOne: false
+            referencedRelation: "brand_questionnaires"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prompt_responses: {
+        Row: {
+          answer_text: string
+          batch_id: string
+          brand_match: boolean | null
+          competitor_matches: string[] | null
+          created_at: string
+          id: string
+          question_text: string
+          tokens_used: number | null
+        }
+        Insert: {
+          answer_text: string
+          batch_id: string
+          brand_match?: boolean | null
+          competitor_matches?: string[] | null
+          created_at?: string
+          id?: string
+          question_text: string
+          tokens_used?: number | null
+        }
+        Update: {
+          answer_text?: string
+          batch_id?: string
+          brand_match?: boolean | null
+          competitor_matches?: string[] | null
+          created_at?: string
+          id?: string
+          question_text?: string
+          tokens_used?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prompt_responses_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "prompt_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reports: {
         Row: {
           company_name: string | null
@@ -121,7 +321,14 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      v_queue_health: {
+        Row: {
+          avg_age_minutes: number | null
+          batch_count: number | null
+          status: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never

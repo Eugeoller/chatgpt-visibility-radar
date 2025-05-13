@@ -1,284 +1,293 @@
 
 import { useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/context/AuthContext";
-import { toast } from "sonner";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-import * as z from "zod";
-import Footer from "@/components/Footer";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { toast } from "sonner";
+import { Loader2, Plus, X } from "lucide-react";
 import ReportPageHeader from "@/components/report/ReportPageHeader";
-
-// Create report form schema
-const formSchema = z.object({
-  companyName: z.string().min(1, "Por favor introduce el nombre de tu empresa"),
-  sector: z.string().min(1, "Por favor introduce el sector de tu empresa"),
-  website: z.string().url("Por favor introduce una URL válida"),
-  competitors: z.string().optional(),
-});
+import Footer from "@/components/Footer";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/context/AuthContext";
 
 const ReportFormPage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [submitting, setSubmitting] = useState(false);
-  const [orderId, setOrderId] = useState<string | null>(null);
-  
-  // Initialize form
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      companyName: "",
-      sector: "",
-      website: "",
-      competitors: "",
-    },
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    brand_name: "",
+    aliases: [""],
+    competitors: [""],
+    website: "",
+    sector: "",
   });
 
-  // Verify payment status if a session_id is in the URL
-  useEffect(() => {
-    const sessionId = searchParams.get("session_id");
+  // Function to add new alias or competitor field
+  const addField = (field: "aliases" | "competitors") => {
+    setFormData({
+      ...formData,
+      [field]: [...formData[field], ""],
+    });
+  };
+
+  // Function to remove alias or competitor field
+  const removeField = (field: "aliases" | "competitors", index: number) => {
+    setFormData({
+      ...formData,
+      [field]: formData[field].filter((_, i) => i !== index),
+    });
+  };
+
+  // Function to update alias or competitor field
+  const updateField = (field: "aliases" | "competitors", index: number, value: string) => {
+    const newArray = [...formData[field]];
+    newArray[index] = value;
+    setFormData({
+      ...formData,
+      [field]: newArray,
+    });
+  };
+
+  // Function to handle form submission
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
     
-    if (sessionId) {
-      verifyPayment(sessionId);
-    } else {
-      checkExistingPayment();
+    if (!user) {
+      toast.error("Debes iniciar sesión para enviar un informe.");
+      return;
     }
-  }, [searchParams]);
-
-  const verifyPayment = async (sessionId: string) => {
-    try {
-      const { data, error } = await supabase.functions.invoke("verify-session", {
-        body: { sessionId },
-      });
-
-      if (error || !data.hasPaid) {
-        toast.error("No se ha podido verificar el pago. Por favor contacta con soporte.");
-        navigate("/informe");
-        return;
-      }
-
-      if (data.orderId) {
-        setOrderId(data.orderId);
-        toast.success("Pago confirmado. Por favor rellena el formulario.");
-      }
-    } catch (error) {
-      console.error("Error verifying payment:", error);
-      toast.error("Error al verificar el pago");
+    
+    if (!formData.brand_name) {
+      toast.error("El nombre de la marca es obligatorio.");
+      return;
     }
-  };
-
-  const checkExistingPayment = async () => {
-    try {
-      const { data, error } = await supabase.functions.invoke("verify-session", {
-        body: { sessionId: null },
-      });
-
-      if (error) {
-        console.error("Error checking payment:", error);
-        return;
-      }
-
-      if (data.hasPaid && data.orderId) {
-        setOrderId(data.orderId);
-        
-        // Check if user already has a report
-        const { data: reportData } = await supabase
-          .from('reports')
-          .select('*')
-          .eq('order_id', data.orderId)
-          .single();
-          
-        if (reportData) {
-          // Pre-fill form with existing data
-          form.setValue("companyName", reportData.company_name || "");
-          form.setValue("sector", reportData.sector || "");
-          form.setValue("website", reportData.website || "");
-          form.setValue("competitors", reportData.competitors ? reportData.competitors.join(", ") : "");
-          
-          if (reportData.status !== 'pending') {
-            toast.info("Ya has enviado este formulario. Estamos preparando tu informe.");
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Error checking existing payment:", error);
-    }
-  };
-
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    if (!user || !orderId) {
-      toast.error("Hay un problema con tu sesión. Por favor inténtalo de nuevo.");
+    
+    if (!formData.competitors[0]) {
+      toast.error("Debes añadir al menos un competidor.");
       return;
     }
 
-    setSubmitting(true);
+    // Filter out empty fields
+    const filteredAliases = formData.aliases.filter(alias => alias.trim() !== "");
+    const filteredCompetitors = formData.competitors.filter(comp => comp.trim() !== "");
 
     try {
-      // Format competitors as array
-      const competitors = values.competitors
-        ? values.competitors.split(",").map((item) => item.trim())
-        : [];
+      setIsSubmitting(true);
 
-      const { error } = await supabase.from("reports").upsert({
-        user_id: user.id,
-        order_id: orderId,
-        company_name: values.companyName,
-        sector: values.sector,
-        website: values.website,
-        competitors,
-        status: "submitted",
-      });
+      // Insert questionnaire into database
+      const { data: questionnaireData, error: questionnaireError } = await supabase
+        .from('brand_questionnaires')
+        .insert({
+          user_id: user.id,
+          brand_name: formData.brand_name,
+          aliases: filteredAliases.length > 0 ? filteredAliases : [],
+          competitors: filteredCompetitors,
+          website: formData.website || null,
+          sector: formData.sector || null,
+          status: 'pending'
+        })
+        .select()
+        .single();
 
-      if (error) {
-        throw error;
+      if (questionnaireError) {
+        throw new Error(questionnaireError.message);
       }
 
-      toast.success("Formulario enviado con éxito. Recibirás tu informe en breve.");
+      // Create an empty final report entry
+      await supabase
+        .from('final_reports')
+        .insert({
+          questionnaire_id: questionnaireData.id,
+          status: 'processing'
+        });
+
+      // Trigger the report generation edge function
+      const { error: functionError } = await supabase.functions.invoke('generar-reporte-chatgpt', {
+        body: { questionnaireId: questionnaireData.id }
+      });
+
+      if (functionError) {
+        throw new Error(functionError.message);
+      }
+
+      toast.success("¡Reporte solicitado con éxito! Pronto estará listo.");
       
-      // Redirect to a thank you page or dashboard
-      setTimeout(() => {
-        navigate("/");
-      }, 2000);
+      // Redirect to a "processing" or "thank you" page
+      // In a real app, you would redirect to a page where users can see the status of their report
+      navigate("/");
     } catch (error) {
-      console.error("Error submitting report form:", error);
-      toast.error("Error al enviar el formulario. Por favor inténtalo de nuevo.");
+      console.error("Error submitting report:", error);
+      toast.error("Error al enviar el informe. Por favor inténtalo de nuevo.");
     } finally {
-      setSubmitting(false);
+      setIsSubmitting(false);
     }
   };
 
   return (
     <div className="min-h-screen flex flex-col">
       <ReportPageHeader />
-      
-      <main className="flex-grow py-12">
-        <div className="container-custom max-w-3xl">
-          <Card className="shadow-lg">
-            <CardHeader className="bg-navy text-white">
-              <CardTitle className="text-2xl">Cuestionario para tu informe de visibilidad</CardTitle>
-              <CardDescription className="text-gray-300">
-                Por favor, proporciona la información necesaria para crear tu informe personalizado
-              </CardDescription>
-            </CardHeader>
-            
-            <CardContent className="pt-6 pb-8">
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                  <FormField
-                    control={form.control}
-                    name="companyName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Nombre de la empresa</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Tu empresa S.L." {...field} />
-                        </FormControl>
-                        <FormDescription>
-                          Indica el nombre de tu empresa o marca
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="sector"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Sector</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Marketing, Tecnología, Salud..." {...field} />
-                        </FormControl>
-                        <FormDescription>
-                          El sector principal de tu negocio
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="website"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Sitio web</FormLabel>
-                        <FormControl>
-                          <Input placeholder="https://tuempresa.com" {...field} />
-                        </FormControl>
-                        <FormDescription>
-                          La URL completa de tu sitio web
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="competitors"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Competidores principales</FormLabel>
-                        <FormControl>
-                          <Textarea 
-                            placeholder="Competidor 1, Competidor 2, Competidor 3..." 
-                            className="min-h-24"
-                            {...field} 
+      <main className="flex-grow py-10 bg-gray-50">
+        <div className="container-custom">
+          <div className="max-w-3xl mx-auto">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-2xl">Informe de visibilidad en ChatGPT</CardTitle>
+                <CardDescription>
+                  Complete este formulario para analizar la visibilidad de su marca en ChatGPT.
+                </CardDescription>
+              </CardHeader>
+              <form onSubmit={handleSubmit}>
+                <CardContent className="space-y-6">
+                  {/* Brand Name */}
+                  <div className="space-y-2">
+                    <label htmlFor="brand_name" className="text-sm font-medium">
+                      Nombre de la marca <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      id="brand_name"
+                      value={formData.brand_name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, brand_name: e.target.value })
+                      }
+                      placeholder="Nombre de su marca"
+                      required
+                    />
+                  </div>
+
+                  {/* Aliases */}
+                  <div className="space-y-2">
+                    <label htmlFor="aliases" className="text-sm font-medium">
+                      Alias o nombres alternativos de la marca
+                    </label>
+                    <div className="space-y-2">
+                      {formData.aliases.map((alias, index) => (
+                        <div key={`alias-${index}`} className="flex gap-2">
+                          <Input
+                            value={alias}
+                            onChange={(e) =>
+                              updateField("aliases", index, e.target.value)
+                            }
+                            placeholder={`Alias ${index + 1}`}
                           />
-                        </FormControl>
-                        <FormDescription>
-                          Lista tus competidores principales, separados por comas
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <Button 
-                    type="submit" 
-                    className="w-full bg-blue-bright hover:bg-blue-bright/90"
-                    disabled={submitting}
+                          {formData.aliases.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              onClick={() => removeField("aliases", index)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="flex items-center gap-1"
+                        onClick={() => addField("aliases")}
+                      >
+                        <Plus className="h-4 w-4" /> Añadir alias
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Competitors */}
+                  <div className="space-y-2">
+                    <label htmlFor="competitors" className="text-sm font-medium">
+                      Competidores <span className="text-red-500">*</span>
+                    </label>
+                    <div className="space-y-2">
+                      {formData.competitors.map((competitor, index) => (
+                        <div key={`competitor-${index}`} className="flex gap-2">
+                          <Input
+                            value={competitor}
+                            onChange={(e) =>
+                              updateField("competitors", index, e.target.value)
+                            }
+                            placeholder={`Competidor ${index + 1}`}
+                            required={index === 0}
+                          />
+                          {formData.competitors.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              onClick={() => removeField("competitors", index)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="flex items-center gap-1"
+                        onClick={() => addField("competitors")}
+                      >
+                        <Plus className="h-4 w-4" /> Añadir competidor
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Website */}
+                  <div className="space-y-2">
+                    <label htmlFor="website" className="text-sm font-medium">
+                      Sitio web
+                    </label>
+                    <Input
+                      id="website"
+                      value={formData.website}
+                      onChange={(e) =>
+                        setFormData({ ...formData, website: e.target.value })
+                      }
+                      placeholder="https://www.ejemplo.com"
+                      type="url"
+                    />
+                  </div>
+
+                  {/* Sector */}
+                  <div className="space-y-2">
+                    <label htmlFor="sector" className="text-sm font-medium">
+                      Sector o industria
+                    </label>
+                    <Input
+                      id="sector"
+                      value={formData.sector}
+                      onChange={(e) =>
+                        setFormData({ ...formData, sector: e.target.value })
+                      }
+                      placeholder="Ej: Comercio electrónico, SaaS, Educación..."
+                    />
+                  </div>
+                </CardContent>
+                <CardFooter className="flex justify-between">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => navigate("/informe")}
                   >
-                    {submitting ? (
+                    Cancelar
+                  </Button>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? (
                       <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white mr-2"></div>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Enviando...
                       </>
                     ) : (
-                      "Enviar información"
+                      "Solicitar informe"
                     )}
                   </Button>
-                </form>
-              </Form>
-            </CardContent>
-          </Card>
+                </CardFooter>
+              </form>
+            </Card>
+          </div>
         </div>
       </main>
-      
       <Footer />
     </div>
   );
