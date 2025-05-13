@@ -72,7 +72,8 @@ const ReportsPage = () => {
           status,
           error_message,
           progress_percent,
-          final_reports(pdf_url, status)
+          final_reports(pdf_url, status),
+          prompt_batches(id, batch_number, status)
         `)
         .eq('user_id', user?.id)
         .order('created_at', { ascending: false });
@@ -87,15 +88,37 @@ const ReportsPage = () => {
       }
 
       // Format reports data - use type assertion since we know the structure
-      const formattedReports = data.map((report: any) => ({
-        id: report.id,
-        brand_name: report.brand_name,
-        status: (report.final_reports?.[0]?.status || report.status) as Report["status"],
-        created_at: report.created_at,
-        pdf_url: report.final_reports?.[0]?.pdf_url || null,
-        error_message: report.error_message,
-        progress_percent: report.progress_percent
-      }));
+      const formattedReports = data.map((report: any) => {
+        // Calculate batch info
+        const batches = report.prompt_batches || [];
+        const completedBatches = batches.filter((b: any) => b.status === 'complete').length;
+        const totalBatches = batches.length;
+        const nextBatch = batches.find((b: any) => b.status === 'pending' || b.status === 'error');
+        const allBatchesProcessed = completedBatches === totalBatches && totalBatches > 0;
+
+        // Set status to pending if we have completed batches but not all of them
+        let status = report.status;
+        if (completedBatches > 0 && !allBatchesProcessed && status !== 'processing') {
+          status = 'pending';
+        }
+        
+        return {
+          id: report.id,
+          brand_name: report.brand_name,
+          status: (report.final_reports?.[0]?.status || status) as Report["status"],
+          created_at: report.created_at,
+          pdf_url: report.final_reports?.[0]?.pdf_url || null,
+          error_message: report.error_message,
+          progress_percent: report.progress_percent,
+          batch_info: {
+            completed: completedBatches,
+            total: totalBatches || 0,
+            next_batch_id: nextBatch?.id,
+            next_batch_number: nextBatch?.batch_number,
+            all_batches_processed: allBatchesProcessed
+          }
+        };
+      });
 
       setReports(formattedReports);
     } catch (error) {
@@ -133,6 +156,55 @@ const ReportsPage = () => {
     }
   };
 
+  const handleProcessNextBatch = async (reportId: string) => {
+    try {
+      const report = reports.find(r => r.id === reportId);
+      if (!report || !report.batch_info) {
+        throw new Error("No se encontró información de lotes para este informe");
+      }
+
+      toast.info(`Procesando lote ${report.batch_info.completed + 1} de ${report.batch_info.total}...`);
+
+      // Invoke edge function to process next batch
+      const { error: functionError } = await supabase.functions.invoke('process-next-batch', {
+        body: { questionnaireId: reportId }
+      });
+
+      if (functionError) {
+        throw new Error(functionError.message);
+      }
+
+      // Refresh reports list
+      fetchReports();
+    } catch (error) {
+      console.error("Error processing next batch:", error);
+      toast.error("Error al procesar el siguiente lote. Por favor inténtalo de nuevo.");
+    }
+  };
+
+  const handleProcessAllBatches = async (reportId: string) => {
+    try {
+      toast.info("Procesando todos los lotes automáticamente...");
+
+      // Invoke edge function to process all batches
+      const { error: functionError } = await supabase.functions.invoke('process-all-batches', {
+        body: { questionnaireId: reportId }
+      });
+
+      if (functionError) {
+        throw new Error(functionError.message);
+      }
+
+      toast.success("Procesamiento automático iniciado. El informe estará listo pronto.");
+      
+      // Refresh reports list
+      fetchReports();
+    } catch (error) {
+      console.error("Error processing all batches:", error);
+      toast.error("Error al procesar todos los lotes. Por favor inténtalo de nuevo.");
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <ReportPageHeader />
@@ -145,7 +217,12 @@ const ReportsPage = () => {
           ) : reports.length === 0 ? (
             <EmptyReportState />
           ) : (
-            <ReportCardGrid reports={reports} onRetry={handleRetry} />
+            <ReportCardGrid 
+              reports={reports} 
+              onRetry={handleRetry} 
+              onProcessNextBatch={handleProcessNextBatch} 
+              onProcessAllBatches={handleProcessAllBatches} 
+            />
           )}
         </div>
       </main>

@@ -1,14 +1,11 @@
 
-# This file is used to configure your Supabase project.
-# It's very minimal at the moment and uses default values.
-# Full reference is here: https://github.com/supabase/cli/blob/main/pkg/cmd/root/config/config.go
+kbnaromrpwermjasjevd
 
-project_id = "kbnaromrpwermjasjevd"
-[functions.create-checkout]
-verify_jwt = true
-[functions.verify-session]
-verify_jwt = true
-[functions.generar-reporte-chatgpt]
-verify_jwt = true
 [functions.generar-reporte-chatgpt-v2]
-verify_jwt = true
+verify_jwt = false
+
+[functions.process-next-batch]
+verify_jwt = false
+
+[functions.process-all-batches]
+verify_jwt = false

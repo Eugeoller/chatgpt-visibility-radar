@@ -3,10 +3,10 @@ import { ReactNode } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { DownloadIcon, FileIcon, Loader2, RefreshCw } from "lucide-react";
+import { DownloadIcon, FileIcon, Loader2, Play, RefreshCw } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
-export type ReportStatus = "processing" | "ready" | "error";
+export type ReportStatus = "processing" | "ready" | "error" | "pending";
 
 export interface Report {
   id: string;
@@ -16,9 +16,21 @@ export interface Report {
   pdf_url: string | null;
   error_message: string | null;
   progress_percent?: number;
+  batch_info?: {
+    completed: number;
+    total: number;
+    next_batch_id?: string;
+    next_batch_number?: number;
+    all_batches_processed?: boolean;
+  };
 }
 
 export const statusConfig = {
+  pending: {
+    label: "Pendiente",
+    color: "bg-yellow-100 text-yellow-800",
+    icon: <Play className="h-4 w-4" />
+  },
   processing: {
     label: "Procesando",
     color: "bg-blue-100 text-blue-800",
@@ -39,9 +51,11 @@ export const statusConfig = {
 interface ReportCardProps {
   report: Report;
   onRetry: (reportId: string) => void;
+  onProcessNextBatch?: (reportId: string) => void;
+  onProcessAllBatches?: (reportId: string) => void;
 }
 
-const ReportCard = ({ report, onRetry }: ReportCardProps) => {
+const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }: ReportCardProps) => {
   // Function to format date in a more user-friendly way
   const formatDate = (dateString: string) => {
     const options: Intl.DateTimeFormatOptions = { 
@@ -88,7 +102,24 @@ const ReportCard = ({ report, onRetry }: ReportCardProps) => {
               <p className="text-xs text-gray-500 text-right">
                 {report.progress_percent ? `${Math.round(report.progress_percent)}% completado` : 'Iniciando...'}
               </p>
+              {report.batch_info && (
+                <p className="text-xs text-gray-600 text-center mt-2">
+                  {report.batch_info.completed} de {report.batch_info.total} lotes completados
+                </p>
+              )}
             </div>
+          </>
+        )}
+        {report.status === "pending" && (
+          <>
+            <p className="text-sm text-gray-600 mb-3">
+              Tu informe está listo para continuar con el procesamiento.
+            </p>
+            {report.batch_info && (
+              <p className="text-xs text-gray-600 text-center mt-2">
+                {report.batch_info.completed} de {report.batch_info.total} lotes completados
+              </p>
+            )}
           </>
         )}
         {report.status === "ready" && (
@@ -97,7 +128,7 @@ const ReportCard = ({ report, onRetry }: ReportCardProps) => {
           </p>
         )}
       </CardContent>
-      <CardFooter>
+      <CardFooter className="flex flex-col gap-2">
         {report.status === "error" && (
           <Button 
             onClick={() => onRetry(report.id)} 
@@ -113,6 +144,24 @@ const ReportCard = ({ report, onRetry }: ReportCardProps) => {
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             Procesando...
           </Button>
+        )}
+        {report.status === "pending" && report.batch_info && !report.batch_info.all_batches_processed && (
+          <div className="w-full space-y-2">
+            <Button 
+              onClick={() => onProcessNextBatch && onProcessNextBatch(report.id)} 
+              className="w-full"
+            >
+              <Play className="h-4 w-4 mr-2" />
+              Procesar las siguientes 20 preguntas
+            </Button>
+            <Button 
+              onClick={() => onProcessAllBatches && onProcessAllBatches(report.id)} 
+              variant="outline" 
+              className="w-full"
+            >
+              Procesar todos automáticamente
+            </Button>
+          </div>
         )}
         {report.status === "ready" && report.pdf_url && (
           <Button 
