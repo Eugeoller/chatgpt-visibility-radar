@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import ReportPageHeader from "@/components/report/ReportPageHeader";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/context/AuthContext";
