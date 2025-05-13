@@ -1,8 +1,18 @@
-
 import { supabase } from './supabase-client.ts';
 import { generateQuestions } from './questions-generation.ts';
-import { processBatch } from './question-processing.ts';
 import { generateFinalReport } from './report-generation.ts';
+import { 
+  prepareQuestionBatches, 
+  processSpecificBatch, 
+  processAllBatches,
+  checkBatchesCompletion
+} from './batch-manager.ts';
+import {
+  setQuestionnaireProcessing,
+  setQuestionnairePending,
+  setQuestionnaireComplete,
+  setQuestionnaireError
+} from './questionnaire-status.ts';
 
 // Process questionnaire - Modified for manual batch processing
 export async function processQuestionnaire(
@@ -24,10 +34,7 @@ export async function processQuestionnaire(
   
   // Update questionnaire status to processing and initialize progress if not already set
   if (!options.processSingleBatch) {
-    await supabase
-      .from('brand_questionnaires')
-      .update({ status: 'processing', progress_percent: 0 })
-      .eq('id', questionnaireId);
+    await setQuestionnaireProcessing(questionnaireId);
   }
   
   try {
@@ -51,74 +58,28 @@ export async function processQuestionnaire(
       .eq('questionnaire_id', questionnaireId)
       .order('batch_number', { ascending: true });
       
+    // Generate questions or use existing ones
     let questions: string[] = [];
-    let batches: { batchNumber: number; questions: string[]; id?: string }[] = [];
     
-    // If we have existing batches, use them to resume
-    if (!batchesError && existingBatches && existingBatches.length > 0) {
-      console.log(`Found ${existingBatches.length} existing batches`);
-      
-      // Check if we need to generate questions or if we can use existing ones
-      if (existingBatches.some(batch => batch.questions)) {
-        // Reconstruct questions from existing batches
-        const allQuestions = existingBatches
-          .filter(batch => batch.questions)
-          .map(batch => ({ 
-            batchNumber: batch.batch_number, 
-            questions: JSON.parse(batch.questions),
-            id: batch.id
-          }))
-          .sort((a, b) => a.batchNumber - b.batchNumber);
-          
-        questions = allQuestions.flatMap(batch => batch.questions);
-        batches = allQuestions;
+    // If we have existing batches with questions, use them
+    if (!batchesError && existingBatches && existingBatches.some(batch => batch.questions)) {
+      // Reconstruct questions from existing batches
+      questions = existingBatches
+        .filter(batch => batch.questions)
+        .map(batch => JSON.parse(batch.questions))
+        .flat();
         
-        console.log(`Reconstructed ${questions.length} questions from ${batches.length} existing batches`);
-      } else {
-        console.log(`No questions found in existing batches, regenerating questions`);
-        questions = await generateQuestions(brand_name, competitors);
-        
-        // Create batches from questions
-        batches = [];
-        for (let i = 0; i < Math.ceil(questions.length / 20); i++) {
-          const batchQuestions = questions.slice(i * 20, (i + 1) * 20);
-          batches.push({ 
-            batchNumber: i + 1, 
-            questions: batchQuestions,
-            id: existingBatches.find(b => b.batch_number === i + 1)?.id
-          });
-        }
-      }
+      console.log(`Reconstructed ${questions.length} questions from existing batches`);
     } else {
-      console.log(`No existing batches found, generating questions and creating batches`);
-      
-      // Generate questions first
+      // Generate new questions
       questions = await generateQuestions(brand_name, competitors);
       console.log(`Generated ${questions.length} questions`);
-      
-      // Create batches from questions
-      batches = [];
-      for (let i = 0; i < Math.ceil(questions.length / 20); i++) {
-        const batchQuestions = questions.slice(i * 20, (i + 1) * 20);
-        batches.push({ batchNumber: i + 1, questions: batchQuestions });
-      }
-      
-      console.log(`Created ${batches.length} batches`);
-      
-      // Store all batch information upfront
-      for (const batch of batches) {
-        await supabase.from('prompt_batches').insert({
-          questionnaire_id: questionnaireId,
-          batch_number: batch.batchNumber,
-          questions: JSON.stringify(batch.questions),
-          status: 'pending'
-        });
-      }
-      
-      console.log(`Saved batch information to database`);
     }
     
-    // Determine which batch to process if we're processing a single batch
+    // Create or retrieve batches
+    const batches = await prepareQuestionBatches(questionnaireId, questions);
+    
+    // Determine which processing path to take based on options
     if (options.processSingleBatch || options.batchId) {
       console.log(`Processing single batch`);
       
@@ -153,34 +114,20 @@ export async function processQuestionnaire(
         }
       }
       
-      // Calculate previously processed questions
-      const completedBatches = existingBatches
-        .filter(b => b.status === 'complete' && b.batch_number < batchToProcess.batchNumber)
-        .length;
-        
-      const previouslyProcessed = completedBatches * 20;
-      
-      console.log(`Processing batch ${batchToProcess.batchNumber} (previously processed: ${previouslyProcessed} questions)`);
-      
-      // Process this batch
-      await processBatch(
-        batchToProcess.batchNumber,
-        batchToProcess.questions,
+      // Process the specific batch
+      await processSpecificBatch(
         questionnaireId,
-        { brand: brand_name, aliases: aliases || [] },
-        competitors || [],
-        questions.length,
-        previouslyProcessed,
-        batchToProcess.id
+        batches,
+        existingBatches,
+        batchToProcess,
+        brand_name,
+        aliases,
+        competitors,
+        questions.length
       );
       
       // Check if all batches are complete
-      const { data: updatedBatches } = await supabase
-        .from('prompt_batches')
-        .select('status')
-        .eq('questionnaire_id', questionnaireId);
-        
-      const allComplete = updatedBatches?.every(b => b.status === 'complete');
+      const allComplete = await checkBatchesCompletion(questionnaireId);
       
       // If all batches are complete, generate final report
       if (allComplete) {
@@ -188,15 +135,7 @@ export async function processQuestionnaire(
         await generateFinalReport(questionnaireId);
       } else {
         // Update questionnaire status to pending if there are more batches to process
-        // This is important so the user can see the "Process next batch" button
-        await supabase
-          .from('brand_questionnaires')
-          .update({ 
-            status: 'pending',
-            progress_percent: 0  // Reset progress for next batch
-          })
-          .eq('id', questionnaireId);
-          
+        await setQuestionnairePending(questionnaireId);
         console.log(`Batch processed, waiting for next batch to be requested`);
       }
       
@@ -207,32 +146,15 @@ export async function processQuestionnaire(
     if (options.processAllBatches) {
       console.log(`Processing all batches sequentially`);
       
-      let processedCount = 0;
-      
-      // Process batches one by one
-      for (const batch of batches) {
-        // Skip already completed batches
-        const existingBatch = existingBatches?.find(b => b.batch_number === batch.batchNumber);
-        if (existingBatch?.status === 'complete') {
-          console.log(`Batch ${batch.batchNumber} already complete, skipping`);
-          processedCount += batch.questions.length;
-          continue;
-        }
-        
-        console.log(`Processing batch ${batch.batchNumber} of ${batches.length}`);
-        
-        // Process this batch
-        processedCount = await processBatch(
-          batch.batchNumber,
-          batch.questions,
-          questionnaireId,
-          { brand: brand_name, aliases: aliases || [] },
-          competitors || [],
-          questions.length,
-          processedCount,
-          existingBatch?.id
-        );
-      }
+      await processAllBatches(
+        questionnaireId,
+        batches,
+        existingBatches,
+        brand_name,
+        aliases,
+        competitors,
+        questions.length
+      );
       
       // Generate final report
       console.log(`All batches processed, generating final report`);
@@ -244,32 +166,15 @@ export async function processQuestionnaire(
     // Default processing (process everything at once)
     console.log(`Default processing mode: processing batches sequentially`);
     
-    let processedCount = 0;
-    
-    // Process batches one by one
-    for (const batch of batches) {
-      // Skip already completed batches
-      const existingBatch = existingBatches?.find(b => b.batch_number === batch.batchNumber);
-      if (existingBatch?.status === 'complete') {
-        console.log(`Batch ${batch.batchNumber} already complete, skipping`);
-        processedCount += batch.questions.length;
-        continue;
-      }
-      
-      console.log(`Processing batch ${batch.batchNumber} of ${batches.length}`);
-      
-      // Process this batch
-      processedCount = await processBatch(
-        batch.batchNumber,
-        batch.questions,
-        questionnaireId,
-        { brand: brand_name, aliases: aliases || [] },
-        competitors || [],
-        questions.length,
-        processedCount,
-        existingBatch?.id
-      );
-    }
+    await processAllBatches(
+      questionnaireId,
+      batches,
+      existingBatches,
+      brand_name,
+      aliases,
+      competitors,
+      questions.length
+    );
     
     // Generate final report
     console.log(`All batches processed, generating final report`);
@@ -280,13 +185,7 @@ export async function processQuestionnaire(
     
     // Update questionnaire status to error if not in single batch mode
     if (!options.processSingleBatch) {
-      await supabase
-        .from('brand_questionnaires')
-        .update({ 
-          status: 'error', 
-          error_message: `Error: ${error.message || 'Error desconocido'}` 
-        })
-        .eq('id', questionnaireId);
+      await setQuestionnaireError(questionnaireId, error.message);
     }
     
     throw error;
