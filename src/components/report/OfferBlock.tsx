@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CheckCircle2, ShieldCheck, Star, Lock, AlertCircle } from "lucide-react";
@@ -28,6 +27,45 @@ const OfferBlock = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [checkingPaymentStatus, setCheckingPaymentStatus] = useState(false);
+  const [paymentInitiated, setPaymentInitiated] = useState(false);
+  
+  // Check payment status periodically if payment was initiated
+  useEffect(() => {
+    if (!paymentInitiated || !user) return;
+    
+    const checkPaymentStatus = async () => {
+      try {
+        setCheckingPaymentStatus(true);
+        const { data, error } = await supabase.functions.invoke('verify-session', {
+          body: { sessionId: null }
+        });
+        
+        if (error) {
+          console.error('Error checking payment status:', error);
+          return;
+        }
+        
+        if (data.hasPaid) {
+          toast.success('¡Pago confirmado! Redirigiendo al formulario...');
+          navigate('/informe/formulario');
+        }
+      } catch (error) {
+        console.error('Error checking payment status:', error);
+      } finally {
+        setCheckingPaymentStatus(false);
+      }
+    };
+    
+    // Check immediately
+    checkPaymentStatus();
+    
+    // Then check every 5 seconds
+    const intervalId = setInterval(checkPaymentStatus, 5000);
+    
+    // Clean up interval on unmount
+    return () => clearInterval(intervalId);
+  }, [paymentInitiated, user, navigate]);
 
   const handlePurchaseClick = async () => {
     if (!user) {
@@ -45,7 +83,7 @@ const OfferBlock = () => {
       });
 
       if (checkError) {
-        throw new Error('Error checking payment status');
+        throw new Error('Error verificando el estado del pago');
       }
 
       // If user already has paid, redirect to form
@@ -59,17 +97,21 @@ const OfferBlock = () => {
       const { data, error } = await supabase.functions.invoke('create-checkout', {});
 
       if (error) {
-        throw new Error(`Error creating checkout session: ${error.message}`);
+        throw new Error(`Error creando la sesión de pago: ${error.message}`);
       }
 
       if (data.url) {
-        // Redirect to Stripe checkout
-        window.location.href = data.url;
+        // Open Stripe checkout in a new tab
+        window.open(data.url, '_blank');
+        setPaymentInitiated(true);
+        toast.info('Procesando tu pago. Revisaremos automáticamente cuando se complete.', { 
+          duration: 10000 
+        });
       } else {
-        throw new Error('No checkout URL returned');
+        throw new Error('No se recibió la URL de pago');
       }
     } catch (error) {
-      console.error('Error during checkout process:', error);
+      console.error('Error durante el proceso de checkout:', error);
       toast.error('Ha ocurrido un error al procesar tu solicitud. Por favor inténtalo de nuevo.');
     } finally {
       setLoading(false);
@@ -85,6 +127,28 @@ const OfferBlock = () => {
             Un análisis completo y personalizado para tu marca
           </p>
         </div>
+        
+        {paymentInitiated && (
+          <div className="mb-12">
+            <Card className="border-none bg-blue-100 p-6 shadow-sm">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-4">
+                  <AlertCircle className="text-blue-bright h-6 w-6 flex-shrink-0 mt-1" />
+                  <div>
+                    <h3 className="font-bold text-navy mb-2">Pago en proceso</h3>
+                    <p className="text-gray-700">
+                      Hemos abierto una nueva ventana para completar tu pago. Una vez finalizado, 
+                      serás redirigido automáticamente al formulario de informe.
+                      {checkingPaymentStatus && <span className="ml-2 inline-block">
+                        <span className="animate-pulse">⏱️</span> Verificando estado del pago...
+                      </span>}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
         
         <div className="mb-12">
           <Card className="border-none bg-blue-50 p-6 shadow-sm">
@@ -148,12 +212,17 @@ const OfferBlock = () => {
                 <Button 
                   className="btn-primary text-lg w-full md:w-auto md:px-12 py-6 mb-4"
                   onClick={handlePurchaseClick}
-                  disabled={loading}
+                  disabled={loading || checkingPaymentStatus}
                 >
                   {loading ? (
                     <>
                       <div className="animate-spin rounded-full h-5 w-5 border-2 border-white mr-2"></div>
                       Procesando...
+                    </>
+                  ) : checkingPaymentStatus ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white mr-2"></div>
+                      Verificando pago...
                     </>
                   ) : (
                     "Obtener mi informe ahora por 49€"

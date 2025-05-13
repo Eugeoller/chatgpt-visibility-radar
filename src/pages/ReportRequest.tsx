@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 const ReportRequest = () => {
   const { user, loading } = useAuth();
@@ -31,15 +32,18 @@ const ReportRequest = () => {
           
           if (error) {
             console.error('Error checking payment status:', error);
+            toast.error("Error al verificar el estado de pago. Por favor inténtalo de nuevo.");
             return;
           }
           
           if (data.hasPaid) {
             // Redirect to report form if already paid
+            toast.success("Ya has adquirido un informe. Redirigiendo al formulario...");
             navigate('/informe/formulario');
           }
         } catch (error) {
           console.error('Error during payment check:', error);
+          toast.error("Error al verificar el estado de pago");
         } finally {
           setCheckingPayment(false);
         }
@@ -54,7 +58,12 @@ const ReportRequest = () => {
       <div className="min-h-screen flex flex-col">
         <ReportPageHeader />
         <div className="flex-grow flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-bright"></div>
+          <div className="flex flex-col items-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-bright mb-4"></div>
+            <p className="text-gray-600">
+              {checkingPayment ? "Verificando estado de pago..." : "Cargando..."}
+            </p>
+          </div>
         </div>
         <Footer />
       </div>
