@@ -11,6 +11,8 @@ const BATCH_SIZE = Number(Deno.env.get('BATCH_SIZE') || '20');
 const MAX_RETRIES = Number(Deno.env.get('MAX_RETRIES') || '3');
 const TEMPERATURE = Number(Deno.env.get('TEMPERATURE') || '0.3');
 const COST_LIMIT_EUR = Number(Deno.env.get('COST_LIMIT_EUR') || '20');
+const MIN_QUESTIONS = Number(Deno.env.get('MIN_QUESTIONS') || '90');
+const REQUIRED_QUESTIONS = 100;
 
 // Rate for cost calculation (adjust based on model)
 const COST_PER_1K_TOKENS = 0.01; // gpt-4o-mini rate
@@ -89,8 +91,28 @@ async function generateQuestions(brand: string, competitors: string[]): Promise<
     if (!jsonMatch) throw new Error("No valid JSON array found in response");
     
     const questions = JSON.parse(jsonMatch[0]);
-    if (!Array.isArray(questions) || questions.length !== 100) {
-      throw new Error(`Expected 100 questions, got ${questions.length}`);
+    if (!Array.isArray(questions)) {
+      throw new Error(`Expected an array of questions, got ${typeof questions}`);
+    }
+    
+    console.log(`Received ${questions.length} questions from OpenAI`);
+    
+    // Check if we received enough questions (minimum threshold)
+    if (questions.length < MIN_QUESTIONS) {
+      throw new Error(`Expected at least ${MIN_QUESTIONS} questions, got ${questions.length}`);
+    }
+    
+    // Complete the questions array to exactly 100 if needed
+    if (questions.length < REQUIRED_QUESTIONS) {
+      console.log(`Adding ${REQUIRED_QUESTIONS - questions.length} additional generic questions to reach 100`);
+      const additionalQuestions = generateAdditionalQuestions(brand, competitors, REQUIRED_QUESTIONS - questions.length);
+      return [...questions, ...additionalQuestions];
+    }
+    
+    // If we have more than 100 questions, just take the first 100
+    if (questions.length > REQUIRED_QUESTIONS) {
+      console.log(`Limiting to ${REQUIRED_QUESTIONS} questions (received ${questions.length})`);
+      return questions.slice(0, REQUIRED_QUESTIONS);
     }
     
     return questions;
@@ -98,6 +120,31 @@ async function generateQuestions(brand: string, competitors: string[]): Promise<
     console.error("Failed to parse questions:", e);
     throw new Error(`Failed to parse questions: ${e.message}`);
   }
+}
+
+// Generate additional questions if we don't have enough
+function generateAdditionalQuestions(brand: string, competitors: string[], count: number): string[] {
+  const additionalQuestions = [];
+  const templates = [
+    `¿Cuáles son las ventajas de ${brand} frente a la competencia?`,
+    `¿Qué opina la gente sobre ${brand} en las redes sociales?`,
+    `¿Cómo se compara ${brand} con ${competitors[0] || 'otros competidores'}?`,
+    `¿Cuál es la historia detrás de ${brand}?`,
+    `¿Cuáles son los productos o servicios más populares de ${brand}?`,
+    `¿Qué hace único a ${brand} en su sector?`,
+    `¿Hay alguna controversia relacionada con ${brand}?`,
+    `¿Cuál es la reputación de ${brand} en términos de servicio al cliente?`,
+    `¿Cómo ha evolucionado ${brand} a lo largo del tiempo?`,
+    `¿Qué valores representa la marca ${brand}?`,
+  ];
+  
+  // Generate as many questions as needed
+  for (let i = 0; i < count; i++) {
+    const templateIndex = i % templates.length;
+    additionalQuestions.push(templates[templateIndex]);
+  }
+  
+  return additionalQuestions;
 }
 
 // Process a single question
