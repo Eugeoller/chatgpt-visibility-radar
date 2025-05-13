@@ -72,16 +72,21 @@ const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }
   const status = Object.keys(statusConfig).includes(report.status) ? report.status : 'pending';
   const statusDetails = statusConfig[status as ReportStatus];
 
-  // Check if we should show the process next batch button
-  // Changed logic to show button if there are unprocessed batches, regardless of status
-  const shouldShowProcessButtons = report.batch_info && 
-    !report.batch_info.all_batches_processed && 
-    report.status !== "ready" && 
-    report.status !== "error";
+  // Determine if there are unprocessed batches
+  const hasUnprocessedBatches = report.batch_info && 
+    report.batch_info.completed < report.batch_info.total;
+
+  // Check if we should show the process buttons
+  // Show if there are unprocessed batches and not in "ready" or "error" state
+  const shouldShowProcessButtons = hasUnprocessedBatches && 
+    status !== "ready" && 
+    status !== "error";
 
   // Helper to determine if actively processing (prevents showing next batch button during active processing)
-  const isActivelyProcessing = report.status === "processing" && 
+  const isActivelyProcessing = status === "processing" && 
     (report.progress_percent !== undefined && report.progress_percent > 0 && report.progress_percent < 100);
+
+  console.log(`Report ${report.id} - Status: ${status}, Batches: ${report.batch_info?.completed}/${report.batch_info?.total}, ShowButtons: ${shouldShowProcessButtons}, ActivelyProcessing: ${isActivelyProcessing}`);
 
   return (
     <Card key={report.id} className="h-full flex flex-col">
@@ -102,12 +107,12 @@ const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-grow">
-        {report.status === "error" && (
+        {status === "error" && (
           <p className="text-sm text-red-500">
             Error: {report.error_message || "Ha ocurrido un error al procesar el informe."}
           </p>
         )}
-        {report.status === "processing" && (
+        {status === "processing" && (
           <>
             <p className="text-sm text-gray-600 mb-3">
               Estamos generando tu informe. Este proceso puede tardar varios minutos.
@@ -125,7 +130,7 @@ const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }
             </div>
           </>
         )}
-        {report.status === "pending" && (
+        {status === "pending" && (
           <>
             <p className="text-sm text-gray-600 mb-3">
               Tu informe está listo para continuar con el procesamiento.
@@ -137,14 +142,14 @@ const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }
             )}
           </>
         )}
-        {report.status === "ready" && (
+        {status === "ready" && (
           <p className="text-sm text-gray-600">
             Tu informe está listo para descargar.
           </p>
         )}
       </CardContent>
       <CardFooter className="flex flex-col gap-2">
-        {report.status === "error" && (
+        {status === "error" && (
           <Button 
             onClick={() => onRetry(report.id)} 
             variant="outline" 
@@ -181,7 +186,7 @@ const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }
           </div>
         )}
         
-        {report.status === "ready" && report.pdf_url && (
+        {status === "ready" && report.pdf_url && (
           <Button 
             onClick={() => window.open(report.pdf_url!, "_blank")}
             className="w-full"

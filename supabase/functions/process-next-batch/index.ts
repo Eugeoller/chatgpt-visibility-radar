@@ -57,6 +57,8 @@ async function processBatch(questionnaireId: string, batchId: string): Promise<v
 
 // Helper function to find and process the next pending batch
 async function processNextBatch(questionnaireId: string): Promise<{ batchId: string | null, message: string }> {
+  console.log(`Finding next pending batch for questionnaire: ${questionnaireId}`);
+  
   // Find the next pending batch (or error batch that needs retry)
   const { data: pendingBatches, error: batchesError } = await supabase
     .from('prompt_batches')
@@ -70,22 +72,27 @@ async function processNextBatch(questionnaireId: string): Promise<{ batchId: str
     throw new Error(`Error fetching pending batches: ${batchesError.message}`);
   }
 
+  // Get info about all batches to determine overall status
+  const { data: allBatches, error: allBatchesError } = await supabase
+    .from('prompt_batches')
+    .select('id, status, batch_number')
+    .eq('questionnaire_id', questionnaireId)
+    .order('batch_number', { ascending: true });
+
+  if (allBatchesError) {
+    throw new Error(`Error fetching all batches: ${allBatchesError.message}`);
+  }
+
+  console.log(`Total batches: ${allBatches?.length}, Pending batches: ${pendingBatches?.length}`);
+
   // No more pending batches, check if we need to generate summary and PDF
   if (!pendingBatches || pendingBatches.length === 0) {
-    // Check if all batches are complete
-    const { data: allBatches, error: allBatchesError } = await supabase
-      .from('prompt_batches')
-      .select('id, status')
-      .eq('questionnaire_id', questionnaireId);
-
-    if (allBatchesError) {
-      throw new Error(`Error fetching all batches: ${allBatchesError.message}`);
-    }
-
     const allComplete = allBatches?.every(b => b.status === 'complete') || false;
     
     // If all batches are complete, generate summary and PDF
     if (allComplete && allBatches && allBatches.length > 0) {
+      console.log("All batches are complete, generating final report");
+      
       // Call the final phase of report generation
       const { error: functionError } = await supabase.functions.invoke('generar-reporte-chatgpt-v2', {
         body: { 
@@ -110,6 +117,8 @@ async function processNextBatch(questionnaireId: string): Promise<{ batchId: str
           progress_percent: 0 
         })
         .eq('id', questionnaireId);
+        
+      console.log("Updated questionnaire to pending status as there are incomplete batches");
     }
 
     return { batchId: null, message: 'No hay grupos de preguntas pendientes disponibles.' };
@@ -117,6 +126,7 @@ async function processNextBatch(questionnaireId: string): Promise<{ batchId: str
 
   // We have a pending batch to process
   const nextBatch = pendingBatches[0];
+  console.log(`Processing batch ${nextBatch.batch_number} (${nextBatch.id})`);
   
   // Process this batch
   await processBatch(questionnaireId, nextBatch.id);

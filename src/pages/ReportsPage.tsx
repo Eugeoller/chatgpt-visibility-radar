@@ -37,6 +37,8 @@ const ReportsPage = () => {
           filter: `user_id=eq.${user.id}`
         }, 
         (payload) => {
+          console.log("Received update for questionnaire:", payload.new);
+          
           // Update the report in the list when progress changes
           setReports(prevReports => prevReports.map(report => {
             if (report.id === payload.new.id) {
@@ -45,15 +47,21 @@ const ReportsPage = () => {
                 setProcessingReports(prev => prev.filter(id => id !== report.id));
               }
               
+              // Keep the existing batch info to avoid UI flicker
               return {
                 ...report,
-                status: payload.new.status,
-                progress_percent: payload.new.progress_percent,
-                error_message: payload.new.error_message
+                ...payload.new,
+                batch_info: report.batch_info // preserve existing batch info
               };
             }
             return report;
           }));
+          
+          // Force refresh reports if status changed to ensure we get latest batch info
+          if (payload.new.status !== payload.old.status) {
+            console.log("Status changed, refreshing reports");
+            fetchReports(false); 
+          }
         }
       )
       .subscribe();
@@ -74,6 +82,8 @@ const ReportsPage = () => {
       if (showLoading) {
         setLoading(true);
       }
+
+      console.log("Fetching reports...");
 
       // Get reports data
       const { data, error } = await supabase
@@ -100,6 +110,8 @@ const ReportsPage = () => {
         return;
       }
 
+      console.log("Raw reports data:", data);
+
       // Format reports data - use type assertion since we know the structure
       const formattedReports = data.map((report: any) => {
         // Calculate batch info
@@ -112,7 +124,14 @@ const ReportsPage = () => {
         // Set status to pending if we have completed batches but not all of them
         // and there's currently no active processing happening
         let status = report.status;
-        if (completedBatches > 0 && !allBatchesProcessed && status === 'processing') {
+        
+        // If all batches are complete, ensure status is ready or go with what's in final_reports
+        if (allBatchesProcessed) {
+          status = report.final_reports?.[0]?.status || 'ready';
+        }
+        // If we have a mix of complete and non-complete batches and no active processing,
+        // set to pending to allow continuing
+        else if (completedBatches > 0 && !allBatchesProcessed && status === 'processing') {
           // Check if there's any batch currently processing
           const isAnyBatchProcessing = batches.some((b: any) => b.status === 'processing');
           
@@ -122,10 +141,10 @@ const ReportsPage = () => {
           }
         }
         
-        return {
+        const formatted = {
           id: report.id,
           brand_name: report.brand_name,
-          status: (report.final_reports?.[0]?.status || status) as Report["status"],
+          status: status as Report["status"],
           created_at: report.created_at,
           pdf_url: report.final_reports?.[0]?.pdf_url || null,
           error_message: report.error_message,
@@ -138,6 +157,15 @@ const ReportsPage = () => {
             all_batches_processed: allBatchesProcessed
           }
         };
+
+        console.log(`Formatted report ${formatted.id}:`, {
+          status: formatted.status,
+          batches: `${completedBatches}/${totalBatches}`,
+          allBatchesProcessed,
+          progress: formatted.progress_percent
+        });
+        
+        return formatted;
       });
 
       setReports(formattedReports);
@@ -198,6 +226,13 @@ const ReportsPage = () => {
 
       toast.info(`Procesando el grupo ${report.batch_info.completed + 1} de ${report.batch_info.total}...`);
 
+      console.log(`Processing next batch for report ${reportId}`);
+
+      // Explicitly ensure we're in processing state in the UI
+      setReports(prevReports => prevReports.map(r => 
+        r.id === reportId ? { ...r, status: 'processing' as const } : r
+      ));
+
       // Update status to processing to show progress indicator
       await supabase
         .from('brand_questionnaires')
@@ -205,9 +240,11 @@ const ReportsPage = () => {
         .eq('id', reportId);
 
       // Invoke edge function to process next batch
-      const { error: functionError } = await supabase.functions.invoke('process-next-batch', {
+      const { data, error: functionError } = await supabase.functions.invoke('process-next-batch', {
         body: { questionnaireId: reportId }
       });
+
+      console.log("Process next batch response:", data);
 
       if (functionError) {
         throw new Error(functionError.message);
