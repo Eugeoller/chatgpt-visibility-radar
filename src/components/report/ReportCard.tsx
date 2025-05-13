@@ -165,7 +165,7 @@ const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }
         )}
         {status === "ready" && (
           <div className="space-y-4">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-gray-600 mb-3">
               Tu informe está listo para ver.
             </p>
             
@@ -185,18 +185,6 @@ const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }
                   <ExternalLink className="h-4 w-4" />
                 </Button>
               </div>
-            )}
-            
-            {report.pdf_url && (
-              <Button 
-                onClick={handleDownload}
-                variant="outline"
-                className="w-full mt-2"
-                size="sm"
-              >
-                <DownloadIcon className="h-4 w-4 mr-2" />
-                Descargar informe
-              </Button>
             )}
           </div>
         )}
@@ -240,7 +228,9 @@ const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }
         )}
         
         {status === "ready" && report.pdf_url && (
-          <ReportViewer reportUrl={report.pdf_url} brandName={report.brand_name} />
+          <div className="mt-4 pt-4 border-t border-gray-100 w-full">
+            <ReportViewer reportUrl={report.pdf_url} brandName={report.brand_name} />
+          </div>
         )}
       </CardFooter>
     </Card>
