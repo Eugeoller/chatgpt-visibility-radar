@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { LayoutDashboard } from "lucide-react";
 
 const Navbar = () => {
   const { user, signOut } = useAuth();
@@ -22,6 +23,13 @@ const Navbar = () => {
 
           {user ? (
             <div className="flex items-center gap-4">
+              <Link to="/informes">
+                <Button variant="outline" className="bg-transparent hover:bg-white/10 text-white border border-white/20">
+                  <LayoutDashboard className="h-4 w-4 mr-2" />
+                  Panel de informes
+                </Button>
+              </Link>
+              
               <Link to="/informe">
                 <Button variant="outline" className="bg-transparent hover:bg-white/10 text-white border border-white/20">
                   Solicitar informe

@@ -1,8 +1,12 @@
 
 import { Button } from "@/components/ui/button";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, LayoutDashboard } from "lucide-react";
+import { Link } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
 
 const FinalCta = () => {
+  const { user } = useAuth();
+
   return (
     <section className="py-20 bg-navy text-white relative overflow-hidden">
       <div className="bg-dots absolute inset-0 opacity-20"></div>
@@ -24,10 +28,42 @@ const FinalCta = () => {
         <p className="text-lg text-gray-300 mb-8">
           Tu reputación en ChatGPT ya está en juego. Descubre cómo estás posicionado antes que lo hagan tus competidores.
         </p>
-        <Button className="btn-primary text-lg px-10 py-6 flex items-center gap-2 mx-auto">
-          Empezar ahora
-          <ArrowRight className="h-5 w-5" />
-        </Button>
+        
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          {user ? (
+            <>
+              <Button 
+                className="btn-primary text-lg px-10 py-6 flex items-center gap-2"
+                asChild
+              >
+                <Link to="/informe">
+                  Solicitar nuevo informe
+                  <ArrowRight className="h-5 w-5" />
+                </Link>
+              </Button>
+              
+              <Button 
+                className="bg-white/10 hover:bg-white/20 text-white text-lg px-10 py-6 flex items-center gap-2"
+                asChild
+              >
+                <Link to="/informes">
+                  <LayoutDashboard className="h-5 w-5" />
+                  Ver mi panel
+                </Link>
+              </Button>
+            </>
+          ) : (
+            <Button 
+              className="btn-primary text-lg px-10 py-6 flex items-center gap-2"
+              asChild
+            >
+              <Link to="/informe">
+                Empezar ahora
+                <ArrowRight className="h-5 w-5" />
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
     </section>
   );
