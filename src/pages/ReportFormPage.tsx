@@ -103,8 +103,8 @@ const ReportFormPage = () => {
           status: 'processing'
         });
 
-      // Trigger the report generation edge function
-      const { error: functionError } = await supabase.functions.invoke('generar-reporte-chatgpt', {
+      // Trigger the report generation edge function - UPDATED TO USE V2
+      const { error: functionError } = await supabase.functions.invoke('generar-reporte-chatgpt-v2', {
         body: { questionnaireId: questionnaireData.id }
       });
 
