@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -17,6 +16,7 @@ const ReportsPage = () => {
   const navigate = useNavigate();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
+  const [processingReports, setProcessingReports] = useState<string[]>([]);
 
   useEffect(() => {
     if (!user) {
@@ -40,6 +40,11 @@ const ReportsPage = () => {
           // Update the report in the list when progress changes
           setReports(prevReports => prevReports.map(report => {
             if (report.id === payload.new.id) {
+              // If processing completes, remove from processing list
+              if (payload.new.status !== 'processing' && processingReports.includes(report.id)) {
+                setProcessingReports(prev => prev.filter(id => id !== report.id));
+              }
+              
               return {
                 ...report,
                 status: payload.new.status,
@@ -53,14 +58,22 @@ const ReportsPage = () => {
       )
       .subscribe();
 
+    // Setup a refresh interval to keep data fresh
+    const intervalId = setInterval(() => {
+      fetchReports(false); // Silent refresh (don't show loading state)
+    }, 10000); // Refresh every 10 seconds
+
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(intervalId);
     };
-  }, [user, navigate]);
+  }, [user, navigate, processingReports]);
 
-  const fetchReports = async () => {
+  const fetchReports = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) {
+        setLoading(true);
+      }
 
       // Get reports data
       const { data, error } = await supabase
@@ -97,9 +110,16 @@ const ReportsPage = () => {
         const allBatchesProcessed = completedBatches === totalBatches && totalBatches > 0;
 
         // Set status to pending if we have completed batches but not all of them
+        // and there's currently no active processing happening
         let status = report.status;
-        if (completedBatches > 0 && !allBatchesProcessed && status !== 'processing') {
-          status = 'pending';
+        if (completedBatches > 0 && !allBatchesProcessed && status === 'processing') {
+          // Check if there's any batch currently processing
+          const isAnyBatchProcessing = batches.some((b: any) => b.status === 'processing');
+          
+          // If no batch is processing, set to pending to allow continuing
+          if (!isAnyBatchProcessing && report.progress_percent === 0) {
+            status = 'pending';
+          }
         }
         
         return {
@@ -123,9 +143,13 @@ const ReportsPage = () => {
       setReports(formattedReports);
     } catch (error) {
       console.error("Error fetching reports:", error);
-      toast.error("Error al cargar los informes. Por favor inténtalo de nuevo.");
+      if (showLoading) {
+        toast.error("Error al cargar los informes. Por favor inténtalo de nuevo.");
+      }
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   };
 
@@ -158,12 +182,27 @@ const ReportsPage = () => {
 
   const handleProcessNextBatch = async (reportId: string) => {
     try {
+      // Prevent double-processing
+      if (processingReports.includes(reportId)) {
+        toast.info("Ya se está procesando este grupo de preguntas. Por favor espera.");
+        return;
+      }
+      
+      // Add to processing list
+      setProcessingReports(prev => [...prev, reportId]);
+      
       const report = reports.find(r => r.id === reportId);
       if (!report || !report.batch_info) {
-        throw new Error("No se encontró información de lotes para este informe");
+        throw new Error("No se encontró información de grupos de preguntas para este informe");
       }
 
-      toast.info(`Procesando lote ${report.batch_info.completed + 1} de ${report.batch_info.total}...`);
+      toast.info(`Procesando el grupo ${report.batch_info.completed + 1} de ${report.batch_info.total}...`);
+
+      // Update status to processing to show progress indicator
+      await supabase
+        .from('brand_questionnaires')
+        .update({ status: 'processing' })
+        .eq('id', reportId);
 
       // Invoke edge function to process next batch
       const { error: functionError } = await supabase.functions.invoke('process-next-batch', {
@@ -178,13 +217,25 @@ const ReportsPage = () => {
       fetchReports();
     } catch (error) {
       console.error("Error processing next batch:", error);
-      toast.error("Error al procesar el siguiente lote. Por favor inténtalo de nuevo.");
+      toast.error("Error al procesar el siguiente grupo de preguntas. Por favor inténtalo de nuevo.");
+      
+      // Remove from processing list
+      setProcessingReports(prev => prev.filter(id => id !== reportId));
     }
   };
 
   const handleProcessAllBatches = async (reportId: string) => {
     try {
-      toast.info("Procesando todos los lotes automáticamente...");
+      toast.info("Procesando todos los grupos de preguntas automáticamente...");
+
+      // Add to processing list
+      setProcessingReports(prev => [...prev, reportId]);
+
+      // Update status to processing
+      await supabase
+        .from('brand_questionnaires')
+        .update({ status: 'processing' })
+        .eq('id', reportId);
 
       // Invoke edge function to process all batches
       const { error: functionError } = await supabase.functions.invoke('process-all-batches', {
@@ -201,7 +252,10 @@ const ReportsPage = () => {
       fetchReports();
     } catch (error) {
       console.error("Error processing all batches:", error);
-      toast.error("Error al procesar todos los lotes. Por favor inténtalo de nuevo.");
+      toast.error("Error al procesar todos los grupos de preguntas. Por favor inténtalo de nuevo.");
+      
+      // Remove from processing list
+      setProcessingReports(prev => prev.filter(id => id !== reportId));
     }
   };
 

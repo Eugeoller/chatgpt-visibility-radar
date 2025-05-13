@@ -68,6 +68,17 @@ const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }
     return new Date(dateString).toLocaleDateString(undefined, options);
   };
 
+  // Check if we should show the process next batch button
+  // Changed logic to show button if there are unprocessed batches, regardless of status
+  const shouldShowProcessButtons = report.batch_info && 
+    !report.batch_info.all_batches_processed && 
+    report.status !== "ready" && 
+    report.status !== "error";
+
+  // Helper to determine if actively processing (prevents showing next batch button during active processing)
+  const isActivelyProcessing = report.status === "processing" && 
+    (report.progress_percent !== undefined && report.progress_percent > 0 && report.progress_percent < 100);
+
   return (
     <Card key={report.id} className="h-full flex flex-col">
       <CardHeader>
@@ -104,7 +115,7 @@ const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }
               </p>
               {report.batch_info && (
                 <p className="text-xs text-gray-600 text-center mt-2">
-                  {report.batch_info.completed} de {report.batch_info.total} lotes completados
+                  {report.batch_info.completed} de {report.batch_info.total} grupos de preguntas completados
                 </p>
               )}
             </div>
@@ -117,7 +128,7 @@ const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }
             </p>
             {report.batch_info && (
               <p className="text-xs text-gray-600 text-center mt-2">
-                {report.batch_info.completed} de {report.batch_info.total} lotes completados
+                {report.batch_info.completed} de {report.batch_info.total} grupos de preguntas completados
               </p>
             )}
           </>
@@ -139,30 +150,33 @@ const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }
             Reintentar con V2
           </Button>
         )}
-        {report.status === "processing" && (
+        
+        {isActivelyProcessing && (
           <Button variant="outline" disabled className="w-full">
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             Procesando...
           </Button>
         )}
-        {report.status === "pending" && report.batch_info && !report.batch_info.all_batches_processed && (
+        
+        {shouldShowProcessButtons && !isActivelyProcessing && (
           <div className="w-full space-y-2">
             <Button 
               onClick={() => onProcessNextBatch && onProcessNextBatch(report.id)} 
               className="w-full"
             >
               <Play className="h-4 w-4 mr-2" />
-              Procesar las siguientes 20 preguntas
+              Procesar siguientes 20 preguntas
             </Button>
             <Button 
               onClick={() => onProcessAllBatches && onProcessAllBatches(report.id)} 
               variant="outline" 
               className="w-full"
             >
-              Procesar todos automáticamente
+              Procesar todas las preguntas automáticamente
             </Button>
           </div>
         )}
+        
         {report.status === "ready" && report.pdf_url && (
           <Button 
             onClick={() => window.open(report.pdf_url!, "_blank")}

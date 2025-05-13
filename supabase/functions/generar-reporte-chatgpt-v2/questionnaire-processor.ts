@@ -1,3 +1,4 @@
+
 import { supabase } from './supabase-client.ts';
 import { generateQuestions } from './questions-generation.ts';
 import { processBatch } from './question-processing.ts';
@@ -186,10 +187,14 @@ export async function processQuestionnaire(
         console.log(`All batches are complete, generating final report`);
         await generateFinalReport(questionnaireId);
       } else {
-        // Update questionnaire status to reflect partial completion
+        // Update questionnaire status to pending if there are more batches to process
+        // This is important so the user can see the "Process next batch" button
         await supabase
           .from('brand_questionnaires')
-          .update({ status: 'pending' })
+          .update({ 
+            status: 'pending',
+            progress_percent: 0  // Reset progress for next batch
+          })
           .eq('id', questionnaireId);
           
         console.log(`Batch processed, waiting for next batch to be requested`);

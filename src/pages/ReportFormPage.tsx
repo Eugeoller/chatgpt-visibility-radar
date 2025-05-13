@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -114,9 +113,8 @@ const ReportFormPage = () => {
 
       toast.success("¡Reporte solicitado con éxito! Pronto estará listo.");
       
-      // Redirect to a "processing" or "thank you" page
-      // In a real app, you would redirect to a page where users can see the status of their report
-      navigate("/");
+      // MODIFIED: Redirect to reports page instead of home page
+      navigate("/informes");
     } catch (error) {
       console.error("Error submitting report:", error);
       toast.error("Error al enviar el informe. Por favor inténtalo de nuevo.");

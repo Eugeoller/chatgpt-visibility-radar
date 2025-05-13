@@ -98,10 +98,21 @@ async function processNextBatch(questionnaireId: string): Promise<{ batchId: str
         throw new Error(`Error generating final report: ${functionError.message}`);
       }
 
-      return { batchId: null, message: 'Todos los lotes completados. Generando informe final.' };
+      return { batchId: null, message: 'Todos los grupos de preguntas completados. Generando informe final.' };
     }
 
-    return { batchId: null, message: 'No hay lotes pendientes disponibles.' };
+    // Set questionnaire status to pending if there are any incomplete batches
+    if (allBatches && allBatches.some(b => b.status !== 'complete')) {
+      await supabase
+        .from('brand_questionnaires')
+        .update({ 
+          status: 'pending', 
+          progress_percent: 0 
+        })
+        .eq('id', questionnaireId);
+    }
+
+    return { batchId: null, message: 'No hay grupos de preguntas pendientes disponibles.' };
   }
 
   // We have a pending batch to process
@@ -112,7 +123,7 @@ async function processNextBatch(questionnaireId: string): Promise<{ batchId: str
   
   return { 
     batchId: nextBatch.id, 
-    message: `Procesando lote ${nextBatch.batch_number}.` 
+    message: `Procesando grupo ${nextBatch.batch_number}.` 
   };
 }
 
