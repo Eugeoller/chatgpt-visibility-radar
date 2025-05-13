@@ -2,8 +2,9 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
-import { Eye } from "lucide-react";
+import { Eye, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 interface ReportViewerProps {
   reportUrl: string | null;
@@ -24,11 +25,21 @@ const ReportViewer = ({ reportUrl, brandName }: ReportViewerProps) => {
     return null;
   }
 
+  const openExternalLink = () => {
+    window.open(reportUrl, "_blank");
+    toast.success("Informe abierto en una nueva pestaña");
+  };
+
   return (
-    <>
-      <Button onClick={() => setOpen(true)} className="w-full">
+    <div className="space-y-2 w-full">
+      <Button onClick={() => setOpen(true)} className="w-full bg-green-600 hover:bg-green-700">
         <Eye className="h-4 w-4 mr-2" />
         Ver informe
+      </Button>
+      
+      <Button onClick={openExternalLink} variant="outline" className="w-full">
+        <ExternalLink className="h-4 w-4 mr-2" />
+        Abrir en nueva pestaña
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -55,7 +66,7 @@ const ReportViewer = ({ reportUrl, brandName }: ReportViewerProps) => {
           </div>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 };
 

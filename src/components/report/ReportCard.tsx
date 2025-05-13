@@ -2,9 +2,10 @@ import { ReactNode } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { DownloadIcon, FileIcon, Loader2, Play, RefreshCw } from "lucide-react";
+import { DownloadIcon, ExternalLink, FileIcon, Loader2, Play, RefreshCw } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import ReportViewer from "./ReportViewer";
+import { toast } from "sonner";
 
 export type ReportStatus = "processing" | "ready" | "error" | "pending";
 
@@ -100,6 +101,14 @@ const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }
     }
   };
 
+  // Function to copy report link to clipboard
+  const copyReportLink = () => {
+    if (report.pdf_url) {
+      navigator.clipboard.writeText(report.pdf_url);
+      toast.success("Enlace copiado al portapapeles");
+    }
+  };
+
   return (
     <Card key={report.id} className="h-full flex flex-col">
       <CardHeader>
@@ -157,8 +166,26 @@ const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }
         {status === "ready" && (
           <div className="space-y-4">
             <p className="text-sm text-gray-600">
-              Tu informe está listo para descargar.
+              Tu informe está listo para ver.
             </p>
+            
+            {report.pdf_url && (
+              <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-md overflow-hidden">
+                <input 
+                  type="text" 
+                  value={report.pdf_url} 
+                  readOnly 
+                  className="text-xs bg-transparent flex-grow truncate outline-none"
+                />
+                <Button 
+                  onClick={copyReportLink}
+                  variant="ghost"
+                  size="sm"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
             
             {report.pdf_url && (
               <Button 
