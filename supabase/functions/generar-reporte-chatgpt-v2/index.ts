@@ -11,7 +11,7 @@ const BATCH_SIZE = Number(Deno.env.get('BATCH_SIZE') || '20');
 const MAX_RETRIES = Number(Deno.env.get('MAX_RETRIES') || '3');
 const TEMPERATURE = Number(Deno.env.get('TEMPERATURE') || '0.3');
 const COST_LIMIT_EUR = Number(Deno.env.get('COST_LIMIT_EUR') || '20');
-const MIN_QUESTIONS = Number(Deno.env.get('MIN_QUESTIONS') || '90');
+const MIN_QUESTIONS = Number(Deno.env.get('MIN_QUESTIONS') || '50');
 const REQUIRED_QUESTIONS = 100;
 
 // Rate for cost calculation (adjust based on model)
@@ -80,8 +80,8 @@ async function callOpenAI(prompt: string, systemPrompt: string): Promise<{ text:
 // Generate questions based on brand and competitors
 async function generateQuestions(brand: string, competitors: string[]): Promise<string[]> {
   const competitorsStr = competitors.join(', ');
-  const prompt = `Crea EXACTAMENTE 100 preguntas que un usuario real podría hacer en ChatGPT donde, de forma natural, aparezca la marca ${brand} o alguno de sus competidores (${competitorsStr}).`;
-  const systemPrompt = "Eres experto en branding e IA. Devuelve un JSON array con las 100 preguntas.";
+  const prompt = `Crea preguntas que un usuario real podría hacer en ChatGPT donde, de forma natural, aparezca la marca ${brand} o alguno de sus competidores (${competitorsStr}). Genera tantas como puedas, idealmente 100 preguntas.`;
+  const systemPrompt = "Eres experto en branding e IA. Devuelve un JSON array con las preguntas.";
   
   const { text, tokens } = await withRetry(() => callOpenAI(prompt, systemPrompt), MAX_RETRIES);
   
@@ -102,14 +102,14 @@ async function generateQuestions(brand: string, competitors: string[]): Promise<
       throw new Error(`Expected at least ${MIN_QUESTIONS} questions, got ${questions.length}`);
     }
     
-    // Complete the questions array to exactly 100 if needed
+    // Complete the questions array to exactly REQUIRED_QUESTIONS if needed
     if (questions.length < REQUIRED_QUESTIONS) {
-      console.log(`Adding ${REQUIRED_QUESTIONS - questions.length} additional generic questions to reach 100`);
+      console.log(`Adding ${REQUIRED_QUESTIONS - questions.length} additional generic questions to reach ${REQUIRED_QUESTIONS}`);
       const additionalQuestions = generateAdditionalQuestions(brand, competitors, REQUIRED_QUESTIONS - questions.length);
       return [...questions, ...additionalQuestions];
     }
     
-    // If we have more than 100 questions, just take the first 100
+    // If we have more than REQUIRED_QUESTIONS questions, just take the first REQUIRED_QUESTIONS
     if (questions.length > REQUIRED_QUESTIONS) {
       console.log(`Limiting to ${REQUIRED_QUESTIONS} questions (received ${questions.length})`);
       return questions.slice(0, REQUIRED_QUESTIONS);
@@ -136,6 +136,16 @@ function generateAdditionalQuestions(brand: string, competitors: string[], count
     `¿Cuál es la reputación de ${brand} en términos de servicio al cliente?`,
     `¿Cómo ha evolucionado ${brand} a lo largo del tiempo?`,
     `¿Qué valores representa la marca ${brand}?`,
+    `¿Cuáles son las críticas más comunes sobre ${brand}?`,
+    `¿Tiene ${brand} programas de responsabilidad social?`,
+    `¿Cuál es la presencia internacional de ${brand}?`,
+    `¿Cómo es la experiencia de usuario con ${brand}?`,
+    `¿Qué tecnologías utiliza ${brand} en sus productos?`,
+    `¿Quiénes son los principales directivos de ${brand}?`,
+    `¿Cuál es la estrategia de marketing de ${brand}?`,
+    `¿Cómo maneja ${brand} las quejas de los clientes?`,
+    `¿Cuáles son las promociones actuales de ${brand}?`,
+    `¿Qué innovaciones ha presentado ${brand} recientemente?`,
   ];
   
   // Generate as many questions as needed
@@ -512,7 +522,7 @@ async function processQuestionnaire(questionnaireId: string): Promise<void> {
     
     const { brand_name, aliases, competitors, user_id } = questionnaire;
     
-    // Generate 100 questions
+    // Generate questions
     console.log(`Generating questions for brand: ${brand_name}`);
     const questions = await generateQuestions(brand_name, competitors);
     
