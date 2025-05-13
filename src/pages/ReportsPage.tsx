@@ -63,7 +63,7 @@ const ReportsPage = () => {
       setLoading(true);
 
       // Get reports data
-      const { data: reportsData, error: reportsError } = await supabase
+      const { data, error } = await supabase
         .from('brand_questionnaires')
         .select(`
           id,
@@ -77,12 +77,17 @@ const ReportsPage = () => {
         .eq('user_id', user?.id)
         .order('created_at', { ascending: false });
 
-      if (reportsError) {
-        throw new Error(reportsError.message);
+      if (error) {
+        throw new Error(error.message);
       }
 
-      // Format reports data
-      const formattedReports = reportsData.map((report) => ({
+      if (!data) {
+        setReports([]);
+        return;
+      }
+
+      // Format reports data - use type assertion since we know the structure
+      const formattedReports = data.map((report: any) => ({
         id: report.id,
         brand_name: report.brand_name,
         status: (report.final_reports?.[0]?.status || report.status) as Report["status"],
