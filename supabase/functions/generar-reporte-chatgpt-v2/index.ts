@@ -190,7 +190,7 @@ async function processQuestion(
   });
 }
 
-// Process a batch of questions
+// Process a batch of questions with improved resilience and resume capability
 async function processBatch(
   batchNumber: number,
   questions: string[],
@@ -198,43 +198,139 @@ async function processBatch(
   brandInfo: { brand: string; aliases: string[] },
   competitors: string[]
 ): Promise<void> {
-  // Create batch record
-  const { data: batchData, error: batchError } = await supabase
+  // Check if batch already exists
+  const { data: existingBatch, error: batchCheckError } = await supabase
     .from('prompt_batches')
-    .insert({
-      questionnaire_id: questionnaireId,
-      batch_number: batchNumber,
-      questions: JSON.stringify(questions),
-      status: 'processing'
-    })
-    .select('id')
+    .select('id, status')
+    .eq('questionnaire_id', questionnaireId)
+    .eq('batch_number', batchNumber)
     .single();
     
-  if (batchError || !batchData) {
-    throw new Error(`Failed to create batch: ${batchError?.message || 'No data returned'}`);
-  }
+  let batchId: string;
   
-  const batchId = batchData.id;
-  
-  try {
-    // Process questions in sequence (to avoid rate limits)
-    for (const question of questions) {
-      await processQuestion(question, brandInfo, competitors, batchId);
+  if (batchCheckError || !existingBatch) {
+    // Create new batch record if it doesn't exist
+    const { data: batchData, error: batchError } = await supabase
+      .from('prompt_batches')
+      .insert({
+        questionnaire_id: questionnaireId,
+        batch_number: batchNumber,
+        questions: JSON.stringify(questions),
+        status: 'processing'
+      })
+      .select('id')
+      .single();
+      
+    if (batchError || !batchData) {
+      throw new Error(`Failed to create batch: ${batchError?.message || 'No data returned'}`);
     }
     
-    // Generate batch summary
-    await generateBatchSummary(batchId, brandInfo.brand, competitors);
+    batchId = batchData.id;
+    console.log(`Created new batch with ID: ${batchId}`);
+  } else {
+    // Use existing batch
+    batchId = existingBatch.id;
     
-    // Mark batch as complete
-    await supabase
-      .from('prompt_batches')
-      .update({ status: 'complete' })
-      .eq('id', batchId);
+    // If batch is already complete, skip processing
+    if (existingBatch.status === 'complete') {
+      console.log(`Batch ${batchNumber} is already complete. Skipping.`);
+      return;
+    }
+    
+    // If batch had an error, update to processing
+    if (existingBatch.status === 'error') {
+      await supabase
+        .from('prompt_batches')
+        .update({ status: 'processing', error_message: null })
+        .eq('id', batchId);
+      
+      console.log(`Resuming batch ${batchNumber} with ID: ${batchId} after previous error`);
+    } else {
+      console.log(`Resuming batch ${batchNumber} with ID: ${batchId}`);
+    }
+  }
+  
+  try {
+    // Get already processed questions to resume work
+    const { data: processed, error: processedError } = await supabase
+      .from('prompt_responses')
+      .select('question_text')
+      .eq('batch_id', batchId);
+      
+    if (processedError) {
+      console.error(`Error fetching processed questions: ${processedError.message}`);
+    }
+    
+    // Create set of already processed questions
+    const alreadyProcessed = new Set(processed?.map(p => p.question_text) || []);
+    console.log(`Found ${alreadyProcessed.size} already processed questions out of ${questions.length}`);
+    
+    // Get pending questions (those that haven't been processed yet)
+    const pendingQuestions = questions.filter(q => !alreadyProcessed.has(q));
+    console.log(`Processing ${pendingQuestions.length} remaining questions`);
+    
+    // Process questions individually with try/catch to avoid losing progress
+    let completedCount = alreadyProcessed.size;
+    let failedCount = 0;
+    
+    for (const question of pendingQuestions) {
+      try {
+        await processQuestion(question, brandInfo, competitors, batchId);
+        completedCount++;
+        
+        // Log progress
+        if (completedCount % 5 === 0 || completedCount === questions.length) {
+          console.log(`Batch ${batchNumber} progress: ${completedCount}/${questions.length} (${Math.round((completedCount/questions.length)*100)}%)`);
+          
+          // Update batch status with progress information
+          await supabase
+            .from('prompt_batches')
+            .update({ status: 'processing' })
+            .eq('id', batchId);
+        }
+      } catch (error) {
+        failedCount++;
+        console.error(`Error processing question "${question}":`, error);
+        // Continue with the next question despite this error
+      }
+    }
+    
+    // Generate batch summary only if we processed at least some questions
+    if (completedCount > 0) {
+      try {
+        await generateBatchSummary(batchId, brandInfo.brand, competitors);
+      } catch (error) {
+        console.error(`Error generating summary for batch ${batchId}:`, error);
+        // Don't fail the entire batch because of summary generation error
+      }
+    }
+    
+    // Check if all questions have been processed
+    if (completedCount === questions.length) {
+      // Mark batch as complete
+      await supabase
+        .from('prompt_batches')
+        .update({ status: 'complete' })
+        .eq('id', batchId);
+        
+      console.log(`Successfully completed batch ${batchNumber}`);
+    } else {
+      // If we still have some pending questions after all retries, mark as error
+      await supabase
+        .from('prompt_batches')
+        .update({ 
+          status: 'error', 
+          error_message: `Processed ${completedCount}/${questions.length} questions. Failed to process ${failedCount} questions.` 
+        })
+        .eq('id', batchId);
+        
+      console.log(`Batch ${batchNumber} ended with ${questions.length - completedCount} unprocessed questions`);
+    }
       
   } catch (error) {
-    console.error(`Error processing batch ${batchNumber}:`, error);
+    console.error(`Error in batch ${batchNumber} processing:`, error);
     
-    // Mark batch as error
+    // Mark batch as error but preserve any progress made
     await supabase
       .from('prompt_batches')
       .update({ 
@@ -249,14 +345,26 @@ async function processBatch(
 
 // Generate summary for a batch of responses
 async function generateBatchSummary(batchId: string, brand: string, competitors: string[]): Promise<void> {
+  // Check if summary already exists
+  const { data: existingSummary } = await supabase
+    .from('batch_summaries')
+    .select('id')
+    .eq('batch_id', batchId)
+    .maybeSingle();
+    
+  if (existingSummary) {
+    console.log(`Summary for batch ${batchId} already exists, skipping summary generation`);
+    return;
+  }
+  
   // Get all responses for this batch
   const { data: responses, error: responsesError } = await supabase
     .from('prompt_responses')
     .select('question_text, answer_text, brand_match, competitor_matches')
     .eq('batch_id', batchId);
     
-  if (responsesError || !responses) {
-    throw new Error(`Failed to fetch responses: ${responsesError?.message || 'No data returned'}`);
+  if (responsesError || !responses || responses.length === 0) {
+    throw new Error(`Failed to fetch responses for summary: ${responsesError?.message || 'No data returned'}`);
   }
   
   const prompt = `Resume las siguientes respuestas destacando (a) menciones de ${brand}, (b) menciones de competidores (${competitors.join(', ')}), (c) tono general y sentimiento.\n\nRespuestas:\n${JSON.stringify(responses, null, 2)}`;
@@ -277,6 +385,8 @@ async function generateBatchSummary(batchId: string, brand: string, competitors:
       summary_json: summaryJson
     });
     
+    console.log(`Generated and stored summary for batch ${batchId}`);
+    
   } catch (e) {
     console.error("Failed to parse batch summary:", e);
     throw new Error(`Failed to parse batch summary: ${e.message}`);
@@ -292,8 +402,8 @@ async function generateMetaSummary(questionnaireId: string, brand: string): Prom
     .eq('questionnaire_id', questionnaireId)
     .eq('status', 'complete');
     
-  if (batchesError || !batches) {
-    throw new Error(`Failed to fetch batches: ${batchesError?.message || 'No data returned'}`);
+  if (batchesError || !batches || batches.length === 0) {
+    throw new Error(`Failed to fetch completed batches: ${batchesError?.message || 'No completed batches found'}`);
   }
   
   const batchIds = batches.map(b => b.id);
@@ -303,8 +413,8 @@ async function generateMetaSummary(questionnaireId: string, brand: string): Prom
     .select('summary_json')
     .in('batch_id', batchIds);
     
-  if (summariesError || !summaries) {
-    throw new Error(`Failed to fetch summaries: ${summariesError?.message || 'No data returned'}`);
+  if (summariesError || !summaries || summaries.length === 0) {
+    throw new Error(`Failed to fetch summaries: ${summariesError?.message || 'No summaries found'}`);
   }
   
   const prompt = `Fusiona estos resúmenes y genera:
@@ -498,7 +608,7 @@ async function calculateMetrics(questionnaireId: string): Promise<{ totalTokens:
   return { totalTokens, costEur };
 }
 
-// Process questionnaire
+// Process questionnaire - Modified to be more resilient
 async function processQuestionnaire(questionnaireId: string): Promise<void> {
   console.log(`Processing questionnaire: ${questionnaireId}`);
   
@@ -522,66 +632,168 @@ async function processQuestionnaire(questionnaireId: string): Promise<void> {
     
     const { brand_name, aliases, competitors, user_id } = questionnaire;
     
-    // Generate questions
-    console.log(`Generating questions for brand: ${brand_name}`);
-    const questions = await generateQuestions(brand_name, competitors);
+    // Check if we already have batches for this questionnaire
+    const { data: existingBatches, error: batchesError } = await supabase
+      .from('prompt_batches')
+      .select('batch_number, status, questions')
+      .eq('questionnaire_id', questionnaireId)
+      .order('batch_number', { ascending: true });
+      
+    let questions: string[] = [];
+    let batches: { batchNumber: number; questions: string[] }[] = [];
     
-    // Process questions in batches
-    const batches = [];
-    for (let i = 0; i < questions.length; i += BATCH_SIZE) {
-      const batchQuestions = questions.slice(i, i + BATCH_SIZE);
-      const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
-      batches.push({ batchNumber, questions: batchQuestions });
+    // If we have existing batches, use them to resume
+    if (!batchesError && existingBatches && existingBatches.length > 0) {
+      console.log(`Found ${existingBatches.length} existing batches`);
+      
+      // Check if we need to generate questions or if we can use existing ones
+      if (existingBatches.some(batch => batch.questions)) {
+        // Reconstruct questions from existing batches
+        const allQuestions: string[] = [];
+        for (const batch of existingBatches) {
+          try {
+            const batchQuestions = JSON.parse(batch.questions as string);
+            if (Array.isArray(batchQuestions)) {
+              allQuestions.push(...batchQuestions);
+            }
+          } catch (e) {
+            console.error(`Error parsing questions from batch ${batch.batch_number}:`, e);
+          }
+        }
+        
+        // If we have enough questions, use them
+        if (allQuestions.length >= MIN_QUESTIONS) {
+          questions = allQuestions;
+          console.log(`Using ${questions.length} questions from existing batches`);
+        } else {
+          // Not enough questions, generate new ones
+          questions = await generateQuestions(brand_name, competitors);
+          console.log(`Generated ${questions.length} new questions`);
+        }
+      } else {
+        // No questions in existing batches, generate new ones
+        questions = await generateQuestions(brand_name, competitors);
+        console.log(`Generated ${questions.length} new questions (no questions in existing batches)`);
+      }
+      
+      // Prepare batches for processing based on existing ones
+      batches = [];
+      for (let i = 0; i < questions.length; i += BATCH_SIZE) {
+        const batchQuestions = questions.slice(i, i + BATCH_SIZE);
+        const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+        batches.push({ batchNumber, questions: batchQuestions });
+      }
+    } else {
+      // No existing batches, generate questions and create new batches
+      console.log(`No existing batches found, generating questions`);
+      questions = await generateQuestions(brand_name, competitors);
+      
+      // Process questions in batches
+      batches = [];
+      for (let i = 0; i < questions.length; i += BATCH_SIZE) {
+        const batchQuestions = questions.slice(i, i + BATCH_SIZE);
+        const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+        batches.push({ batchNumber, questions: batchQuestions });
+      }
     }
     
     // Process each batch
     for (const batch of batches) {
-      console.log(`Processing batch ${batch.batchNumber} with ${batch.questions.length} questions`);
-      await processBatch(
-        batch.batchNumber,
-        batch.questions,
-        questionnaireId,
-        { brand: brand_name, aliases: aliases || [] },
-        competitors
-      );
+      try {
+        console.log(`Processing batch ${batch.batchNumber} with ${batch.questions.length} questions`);
+        await processBatch(
+          batch.batchNumber,
+          batch.questions,
+          questionnaireId,
+          { brand: brand_name, aliases: aliases || [] },
+          competitors
+        );
+      } catch (error) {
+        console.error(`Error processing batch ${batch.batchNumber}:`, error);
+        // Continue with next batch despite errors in this one
+      }
     }
     
-    // Generate meta-summary
-    console.log(`Generating meta-summary`);
-    const metaSummary = await generateMetaSummary(questionnaireId, brand_name);
-    
-    // Calculate metrics
-    const { totalTokens, costEur } = await calculateMetrics(questionnaireId);
-    
-    // Check if cost exceeds limit
-    const costAlert = costEur > COST_LIMIT_EUR;
-    if (costAlert) {
-      console.warn(`Cost alert: €${costEur.toFixed(2)} exceeds limit of €${COST_LIMIT_EUR}`);
-      // In a real system, send an alert to Slack or other monitoring system
-    }
-    
-    // Generate PDF report
-    console.log(`Generating PDF report`);
-    const pdfUrl = await generatePDFReport(questionnaireId, user_id, brand_name, metaSummary);
-    
-    // Update final report
-    await supabase.from('final_reports').upsert({
-      questionnaire_id: questionnaireId,
-      pdf_url: pdfUrl,
-      summary_json: metaSummary,
-      total_tokens: totalTokens,
-      cost_eur: costEur,
-      status: 'ready',
-      cost_alert: costAlert
-    });
-    
-    // Update questionnaire status
-    await supabase
-      .from('brand_questionnaires')
-      .update({ status: 'complete' })
-      .eq('id', questionnaireId);
+    // Check if all batches are complete
+    const { data: completedBatches, error: completedError } = await supabase
+      .from('prompt_batches')
+      .select('id')
+      .eq('questionnaire_id', questionnaireId)
+      .eq('status', 'complete');
       
-    console.log(`Questionnaire ${questionnaireId} completed successfully`);
+    const { data: totalBatches, error: totalError } = await supabase
+      .from('prompt_batches')
+      .select('id')
+      .eq('questionnaire_id', questionnaireId);
+      
+    const allBatchesComplete = 
+      !completedError && !totalError && 
+      completedBatches && totalBatches && 
+      completedBatches.length === totalBatches.length;
+      
+    if (allBatchesComplete) {
+      try {
+        // Generate meta-summary
+        console.log(`Generating meta-summary`);
+        const metaSummary = await generateMetaSummary(questionnaireId, brand_name);
+        
+        // Calculate metrics
+        const { totalTokens, costEur } = await calculateMetrics(questionnaireId);
+        
+        // Check if cost exceeds limit
+        const costAlert = costEur > COST_LIMIT_EUR;
+        if (costAlert) {
+          console.warn(`Cost alert: €${costEur.toFixed(2)} exceeds limit of €${COST_LIMIT_EUR}`);
+        }
+        
+        // Generate PDF report
+        console.log(`Generating PDF report`);
+        const pdfUrl = await generatePDFReport(questionnaireId, user_id, brand_name, metaSummary);
+        
+        // Update final report
+        await supabase.from('final_reports').upsert({
+          questionnaire_id: questionnaireId,
+          pdf_url: pdfUrl,
+          summary_json: metaSummary,
+          total_tokens: totalTokens,
+          cost_eur: costEur,
+          status: 'ready',
+          cost_alert: costAlert
+        });
+        
+        // Update questionnaire status
+        await supabase
+          .from('brand_questionnaires')
+          .update({ status: 'complete' })
+          .eq('id', questionnaireId);
+          
+        console.log(`Questionnaire ${questionnaireId} completed successfully`);
+      } catch (error) {
+        console.error(`Error in final processing:`, error);
+        
+        // Update questionnaire status to error
+        await supabase
+          .from('brand_questionnaires')
+          .update({ 
+            status: 'error', 
+            error_message: `Error in final processing: ${error.message || 'Unknown error'}`
+          })
+          .eq('id', questionnaireId);
+      }
+    } else {
+      // Some batches are not complete
+      const incompleteCount = totalBatches ? totalBatches.length - (completedBatches?.length || 0) : 0;
+      
+      await supabase
+        .from('brand_questionnaires')
+        .update({ 
+          status: 'error', 
+          error_message: `Proceso incompleto: ${completedBatches?.length || 0} de ${totalBatches?.length || 0} lotes completados. ${incompleteCount} lotes no se pudieron procesar.`
+        })
+        .eq('id', questionnaireId);
+        
+      console.log(`Questionnaire ${questionnaireId} partial completion: ${completedBatches?.length || 0}/${totalBatches?.length || 0} batches`);
+    }
     
   } catch (error) {
     console.error(`Error processing questionnaire: ${error}`);
