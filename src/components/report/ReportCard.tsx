@@ -88,6 +88,18 @@ const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }
 
   console.log(`Report ${report.id} - Status: ${status}, Batches: ${report.batch_info?.completed}/${report.batch_info?.total}, ShowButtons: ${shouldShowProcessButtons}, ActivelyProcessing: ${isActivelyProcessing}`);
 
+  // Function to handle direct download of the report
+  const handleDownload = () => {
+    if (report.pdf_url) {
+      const link = document.createElement('a');
+      link.href = report.pdf_url;
+      link.download = `informe-${report.brand_name.toLowerCase().replace(/\s+/g, '-')}.html`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   return (
     <Card key={report.id} className="h-full flex flex-col">
       <CardHeader>
@@ -187,13 +199,23 @@ const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }
         )}
         
         {status === "ready" && report.pdf_url && (
-          <Button 
-            onClick={() => window.open(report.pdf_url!, "_blank")}
-            className="w-full"
-          >
-            <DownloadIcon className="h-4 w-4 mr-2" />
-            Ver informe
-          </Button>
+          <div className="w-full space-y-2">
+            <Button 
+              onClick={() => window.open(report.pdf_url!, "_blank")}
+              className="w-full"
+            >
+              <FileIcon className="h-4 w-4 mr-2" />
+              Ver informe
+            </Button>
+            <Button 
+              onClick={handleDownload}
+              variant="outline"
+              className="w-full"
+            >
+              <DownloadIcon className="h-4 w-4 mr-2" />
+              Descargar informe
+            </Button>
+          </div>
         )}
       </CardFooter>
     </Card>
