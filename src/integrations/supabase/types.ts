@@ -46,6 +46,7 @@ export type Database = {
           created_at: string
           error_message: string | null
           id: string
+          progress_percent: number | null
           sector: string | null
           status: string
           updated_at: string
@@ -59,6 +60,7 @@ export type Database = {
           created_at?: string
           error_message?: string | null
           id?: string
+          progress_percent?: number | null
           sector?: string | null
           status?: string
           updated_at?: string
@@ -72,6 +74,7 @@ export type Database = {
           created_at?: string
           error_message?: string | null
           id?: string
+          progress_percent?: number | null
           sector?: string | null
           status?: string
           updated_at?: string
