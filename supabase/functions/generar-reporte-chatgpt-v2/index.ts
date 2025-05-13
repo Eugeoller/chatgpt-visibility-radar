@@ -1,3 +1,4 @@
+
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.23.0';
 import { createClient as createStorageClient } from 'https://esm.sh/@supabase/storage-js@2.5.5';
@@ -44,6 +45,18 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries: number): Promise<T
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
+}
+
+// Helper for updating progress
+async function updateProgress(questionnaireId: string, totalQuestions: number, processedQuestions: number): Promise<void> {
+  const progressPercent = Math.min(Math.round((processedQuestions / totalQuestions) * 100), 99);
+  
+  await supabase
+    .from('brand_questionnaires')
+    .update({ progress_percent: progressPercent })
+    .eq('id', questionnaireId);
+    
+  console.log(`[V2] Updated progress for ${questionnaireId}: ${progressPercent}% (${processedQuestions}/${totalQuestions} questions)`);
 }
 
 // Call OpenAI API
@@ -195,8 +208,10 @@ async function processBatch(
   questions: string[],
   questionnaireId: string,
   brandInfo: { brand: string; aliases: string[] },
-  competitors: string[]
-): Promise<void> {
+  competitors: string[],
+  totalQuestions: number,
+  previouslyProcessed: number
+): Promise<number> {
   // Check if batch already exists
   const { data: existingBatch, error: batchCheckError } = await supabase
     .from('prompt_batches')
@@ -233,7 +248,8 @@ async function processBatch(
     // If batch is already complete, skip processing
     if (existingBatch.status === 'complete') {
       console.log(`Batch ${batchNumber} is already complete. Skipping.`);
-      return;
+      // Return the number of questions in this batch as already processed
+      return previouslyProcessed + questions.length;
     }
     
     // If batch had an error, update to processing
@@ -276,6 +292,10 @@ async function processBatch(
       try {
         await processQuestion(question, brandInfo, competitors, batchId);
         completedCount++;
+        
+        // Update progress after each question
+        const currentProcessed = previouslyProcessed + completedCount;
+        await updateProgress(questionnaireId, totalQuestions, currentProcessed);
         
         // Log progress
         if (completedCount % 5 === 0 || completedCount === questions.length) {
@@ -325,6 +345,9 @@ async function processBatch(
         
       console.log(`Batch ${batchNumber} ended with ${questions.length - completedCount} unprocessed questions`);
     }
+    
+    // Return the total number of processed questions including this batch
+    return previouslyProcessed + completedCount;
       
   } catch (error) {
     console.error(`Error in batch ${batchNumber} processing:`, error);
@@ -611,10 +634,10 @@ async function calculateMetrics(questionnaireId: string): Promise<{ totalTokens:
 async function processQuestionnaire(questionnaireId: string): Promise<void> {
   console.log(`[V2] Processing questionnaire: ${questionnaireId}`);
   
-  // Update questionnaire status to processing
+  // Update questionnaire status to processing and initialize progress
   await supabase
     .from('brand_questionnaires')
-    .update({ status: 'processing' })
+    .update({ status: 'processing', progress_percent: 0 })
     .eq('id', questionnaireId);
   
   try {
@@ -696,16 +719,26 @@ async function processQuestionnaire(questionnaireId: string): Promise<void> {
       }
     }
     
+    // Initialize progress tracking
+    const totalQuestions = questions.length;
+    let processedQuestions = 0;
+    
+    // First update to show initialization is complete
+    await updateProgress(questionnaireId, totalQuestions, processedQuestions);
+    
     // Process each batch
     for (const batch of batches) {
       try {
         console.log(`Processing batch ${batch.batchNumber} with ${batch.questions.length} questions`);
-        await processBatch(
+        // processBatch now returns the number of processed questions
+        processedQuestions = await processBatch(
           batch.batchNumber,
           batch.questions,
           questionnaireId,
           { brand: brand_name, aliases: aliases || [] },
-          competitors
+          competitors,
+          totalQuestions,
+          processedQuestions
         );
       } catch (error) {
         console.error(`Error processing batch ${batch.batchNumber}:`, error);
@@ -760,10 +793,10 @@ async function processQuestionnaire(questionnaireId: string): Promise<void> {
           cost_alert: costAlert
         });
         
-        // Update questionnaire status
+        // Update questionnaire status and set progress to 100%
         await supabase
           .from('brand_questionnaires')
-          .update({ status: 'complete' })
+          .update({ status: 'complete', progress_percent: 100 })
           .eq('id', questionnaireId);
           
         console.log(`Questionnaire ${questionnaireId} completed successfully`);

@@ -25,6 +25,37 @@ const ReportsPage = () => {
     }
 
     fetchReports();
+
+    // Subscribe to real-time updates for progress
+    const channel = supabase
+      .channel('public:brand_questionnaires')
+      .on('postgres_changes', 
+        { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'brand_questionnaires',
+          filter: `user_id=eq.${user.id}`
+        }, 
+        (payload) => {
+          // Update the report in the list when progress changes
+          setReports(prevReports => prevReports.map(report => {
+            if (report.id === payload.new.id) {
+              return {
+                ...report,
+                status: payload.new.status,
+                progress_percent: payload.new.progress_percent,
+                error_message: payload.new.error_message
+              };
+            }
+            return report;
+          }));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user, navigate]);
 
   const fetchReports = async () => {
@@ -40,6 +71,7 @@ const ReportsPage = () => {
           created_at,
           status,
           error_message,
+          progress_percent,
           final_reports(pdf_url, status)
         `)
         .eq('user_id', user?.id)
@@ -56,7 +88,8 @@ const ReportsPage = () => {
         status: (report.final_reports?.[0]?.status || report.status) as Report["status"],
         created_at: report.created_at,
         pdf_url: report.final_reports?.[0]?.pdf_url || null,
-        error_message: report.error_message
+        error_message: report.error_message,
+        progress_percent: report.progress_percent
       }));
 
       setReports(formattedReports);
@@ -73,7 +106,7 @@ const ReportsPage = () => {
       // Update status to pending
       await supabase
         .from('brand_questionnaires')
-        .update({ status: 'pending', error_message: null })
+        .update({ status: 'pending', error_message: null, progress_percent: 0 })
         .eq('id', reportId);
 
       // Trigger the NEW report generation edge function - Always use V2

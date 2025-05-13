@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DownloadIcon, FileIcon, Loader2, RefreshCw } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 
 export type ReportStatus = "processing" | "ready" | "error";
 
@@ -14,6 +15,7 @@ export interface Report {
   created_at: string;
   pdf_url: string | null;
   error_message: string | null;
+  progress_percent?: number;
 }
 
 export const statusConfig = {
@@ -77,9 +79,17 @@ const ReportCard = ({ report, onRetry }: ReportCardProps) => {
           </p>
         )}
         {report.status === "processing" && (
-          <p className="text-sm text-gray-600">
-            Estamos generando tu informe. Este proceso puede tardar varios minutos.
-          </p>
+          <>
+            <p className="text-sm text-gray-600 mb-3">
+              Estamos generando tu informe. Este proceso puede tardar varios minutos.
+            </p>
+            <div className="space-y-2">
+              <Progress value={report.progress_percent || 0} className="h-2" />
+              <p className="text-xs text-gray-500 text-right">
+                {report.progress_percent ? `${Math.round(report.progress_percent)}% completado` : 'Iniciando...'}
+              </p>
+            </div>
+          </>
         )}
         {report.status === "ready" && (
           <p className="text-sm text-gray-600">

@@ -1,50 +1,14 @@
 
+# This file is used to configure your Supabase project.
+# It's very minimal at the moment and uses default values.
+# Full reference is here: https://github.com/supabase/cli/blob/main/pkg/cmd/root/config/config.go
+
 project_id = "kbnaromrpwermjasjevd"
-
-[api]
-enabled = true
-port = 54321
-schemas = ["public", "storage", "graphql_public"]
-
-[db]
-port = 54322
-
-[realtime]
-enabled = true
-
-[studio]
-enabled = true
-port = 54323
-
-[inbucket]
-enabled = true
-port = 54324
-
-[storage]
-enabled = true
-
-[auth]
-enabled = true
-site_url = "http://localhost:3000"
-
-[analytics]
-enabled = false
-port = 54327
-vector_port = 54328
-ga_measurement_id = ""
-
-[experimental]
-livestream = false
-
-[functions]
 [functions.create-checkout]
 verify_jwt = true
-
 [functions.verify-session]
 verify_jwt = true
-
 [functions.generar-reporte-chatgpt]
 verify_jwt = true
-
 [functions.generar-reporte-chatgpt-v2]
 verify_jwt = true
