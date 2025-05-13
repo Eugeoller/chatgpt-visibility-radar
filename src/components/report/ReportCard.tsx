@@ -25,7 +25,7 @@ export interface Report {
   };
 }
 
-export const statusConfig = {
+export const statusConfig: Record<ReportStatus, { label: string; color: string; icon: ReactNode }> = {
   pending: {
     label: "Pendiente",
     color: "bg-yellow-100 text-yellow-800",
@@ -68,6 +68,10 @@ const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }
     return new Date(dateString).toLocaleDateString(undefined, options);
   };
 
+  // Ensure we have a valid status by defaulting to 'pending' if the status is invalid
+  const status = Object.keys(statusConfig).includes(report.status) ? report.status : 'pending';
+  const statusDetails = statusConfig[status as ReportStatus];
+
   // Check if we should show the process next batch button
   // Changed logic to show button if there are unprocessed batches, regardless of status
   const shouldShowProcessButtons = report.batch_info && 
@@ -85,11 +89,11 @@ const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }
         <div className="flex justify-between items-start">
           <CardTitle className="text-lg">{report.brand_name}</CardTitle>
           <Badge 
-            className={`${statusConfig[report.status].color}`}
+            className={`${statusDetails.color}`}
           >
             <span className="flex items-center gap-1">
-              {statusConfig[report.status].icon}
-              {statusConfig[report.status].label}
+              {statusDetails.icon}
+              {statusDetails.label}
             </span>
           </Badge>
         </div>
