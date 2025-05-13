@@ -156,7 +156,7 @@ export async function generatePDFReport(
     if (!reportsBucketExists) {
       // Create bucket if it doesn't exist
       const { error } = await supabase.storage.createBucket('reports', {
-        public: true,
+        public: true,  // Make bucket public
         fileSizeLimit: 10485760, // 10MB
       });
       
@@ -164,6 +164,17 @@ export async function generatePDFReport(
         console.error("Error creating bucket:", error);
       } else {
         console.log("Created reports bucket");
+      }
+    } else {
+      // Update bucket to make it public if it exists
+      const { error } = await supabase.storage.updateBucket('reports', {
+        public: true
+      });
+      
+      if (error) {
+        console.error("Error updating bucket:", error);
+      } else {
+        console.log("Updated reports bucket to be public");
       }
     }
   } catch (error) {
@@ -179,24 +190,24 @@ export async function generatePDFReport(
     .from('reports')
     .upload(fileName, html, {
       contentType: 'text/html',
-      cacheControl: '3600'
+      cacheControl: '31536000' // 1 year cache
     });
     
   if (uploadError) {
     throw new Error(`Failed to upload report: ${uploadError.message}`);
   }
   
-  // Get public URL
-  const { data: urlData } = await supabase
+  // Get public URL instead of signed URL
+  const { data: publicUrlData } = await supabase
     .storage
     .from('reports')
-    .createSignedUrl(fileName, 60 * 60 * 24 * 7); // 7 days expiry
+    .getPublicUrl(fileName);
     
-  if (!urlData) {
-    throw new Error('Failed to create signed URL');
+  if (!publicUrlData || !publicUrlData.publicUrl) {
+    throw new Error('Failed to create public URL');
   }
   
-  return urlData.signedUrl;
+  return publicUrlData.publicUrl;
 }
 
 // Calculate total cost and tokens

@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -18,13 +19,20 @@ const ReportsPage = () => {
   const [loading, setLoading] = useState(true);
   const [processingReports, setProcessingReports] = useState<string[]>([]);
 
+  // Force an initial refresh when the page loads
   useEffect(() => {
     if (!user) {
       navigate("/auth");
       return;
     }
 
+    // Initial fetch
     fetchReports();
+    
+    // Immediate refresh to ensure we get the latest data
+    const initialRefreshTimeout = setTimeout(() => {
+      fetchReports(false);
+    }, 1000);
 
     // Subscribe to real-time updates for progress
     const channel = supabase
@@ -69,9 +77,10 @@ const ReportsPage = () => {
     // Setup a refresh interval to keep data fresh
     const intervalId = setInterval(() => {
       fetchReports(false); // Silent refresh (don't show loading state)
-    }, 10000); // Refresh every 10 seconds
+    }, 5000); // Refresh every 5 seconds (faster refresh rate)
 
     return () => {
+      clearTimeout(initialRefreshTimeout);
       supabase.removeChannel(channel);
       clearInterval(intervalId);
     };
@@ -141,12 +150,20 @@ const ReportsPage = () => {
           }
         }
         
+        // Extract PDF URL from final_reports and log it for debugging
+        const pdfUrl = report.final_reports?.[0]?.pdf_url || null;
+        if (pdfUrl) {
+          console.log(`Report ${report.id} has PDF URL: ${pdfUrl}`);
+        } else {
+          console.log(`Report ${report.id} has no PDF URL`);
+        }
+        
         const formatted = {
           id: report.id,
           brand_name: report.brand_name,
           status: status as Report["status"],
           created_at: report.created_at,
-          pdf_url: report.final_reports?.[0]?.pdf_url || null,
+          pdf_url: pdfUrl,
           error_message: report.error_message,
           progress_percent: report.progress_percent,
           batch_info: {
@@ -162,7 +179,8 @@ const ReportsPage = () => {
           status: formatted.status,
           batches: `${completedBatches}/${totalBatches}`,
           allBatchesProcessed,
-          progress: formatted.progress_percent
+          progress: formatted.progress_percent,
+          pdfUrl: formatted.pdf_url // Log PDF URL for debugging
         });
         
         return formatted;
@@ -205,6 +223,42 @@ const ReportsPage = () => {
     } catch (error) {
       console.error("Error retrying report:", error);
       toast.error("Error al reintentar el informe. Por favor inténtalo de nuevo.");
+    }
+  };
+
+  // Function to regenerate reports that might have expired URLs
+  const handleRegenerateReports = async () => {
+    try {
+      // Find all reports with status "ready"
+      const readyReports = reports.filter(r => r.status === "ready");
+      
+      if (readyReports.length === 0) {
+        toast.info("No hay informes para regenerar.");
+        return;
+      }
+      
+      toast.info(`Regenerando ${readyReports.length} informes...`);
+      
+      for (const report of readyReports) {
+        // Update to pending to trigger regeneration
+        await supabase
+          .from('brand_questionnaires')
+          .update({ status: 'pending', error_message: null, progress_percent: 0 })
+          .eq('id', report.id);
+          
+        // Trigger regeneration using V2
+        await supabase.functions.invoke('generar-reporte-chatgpt-v2', {
+          body: { questionnaireId: report.id }
+        });
+      }
+      
+      toast.success(`${readyReports.length} informes en proceso de regeneración.`);
+      
+      // Refresh reports
+      fetchReports();
+    } catch (error) {
+      console.error("Error regenerating reports:", error);
+      toast.error("Error al regenerar informes. Por favor inténtalo de nuevo.");
     }
   };
 
@@ -308,12 +362,26 @@ const ReportsPage = () => {
           ) : reports.length === 0 ? (
             <EmptyReportState />
           ) : (
-            <ReportCardGrid 
-              reports={reports} 
-              onRetry={handleRetry} 
-              onProcessNextBatch={handleProcessNextBatch} 
-              onProcessAllBatches={handleProcessAllBatches} 
-            />
+            <>
+              {/* Add a button to regenerate reports if needed */}
+              <div className="mb-4 flex justify-end">
+                <Button 
+                  onClick={handleRegenerateReports}
+                  variant="outline"
+                  size="sm"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Regenerar enlaces de informes
+                </Button>
+              </div>
+              
+              <ReportCardGrid 
+                reports={reports} 
+                onRetry={handleRetry} 
+                onProcessNextBatch={handleProcessNextBatch} 
+                onProcessAllBatches={handleProcessAllBatches} 
+              />
+            </>
           )}
         </div>
       </main>
