@@ -1,4 +1,3 @@
-
 import { COST_LIMIT_EUR, COST_PER_1K_TOKENS } from './config.ts';
 import { supabase } from './supabase-client.ts';
 import { withRetry } from './helpers.ts';
@@ -61,9 +60,7 @@ export async function generatePDFReport(
   brand: string,
   summary: object
 ): Promise<string> {
-  // For now, we'll just generate a simple HTML report and convert it to a "PDF" (actually HTML)
-  // In a production system, you would use a proper PDF generation library
-  
+  // For now, we'll generate an HTML report
   const { data: responses, error: responsesError } = await supabase
     .from('prompt_responses')
     .select(`
@@ -80,7 +77,10 @@ export async function generatePDFReport(
     throw new Error(`Failed to fetch responses: ${responsesError?.message || 'No data returned'}`);
   }
   
-  // Generate HTML report
+  // Parse the summary to create a more readable report
+  const parsedSummary = summary as any;
+  
+  // Generate HTML report with improved styling and visual elements
   const html = `
   <!DOCTYPE html>
   <html>
@@ -88,21 +88,36 @@ export async function generatePDFReport(
     <meta charset="UTF-8">
     <title>Reporte de Visibilidad en ChatGPT - ${brand}</title>
     <style>
-      body { font-family: Arial, sans-serif; margin: 0; padding: 0; color: #333; }
+      body { font-family: Arial, sans-serif; margin: 0; padding: 0; color: #333; background-color: #f9f9f9; }
       .header { background: #1a365d; color: white; padding: 2rem; text-align: center; }
-      .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
-      .summary { background: #f8f8f8; padding: 2rem; border-radius: 5px; margin-bottom: 2rem; }
-      .metrics { display: flex; flex-wrap: wrap; gap: 1rem; margin: 2rem 0; }
-      .metric { background: white; padding: 1.5rem; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); flex: 1; }
-      .metric h3 { margin-top: 0; color: #1a365d; }
-      .tactics { background: white; padding: 1.5rem; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin: 2rem 0; }
+      .container { max-width: 1200px; margin: 0 auto; padding: 2rem; background-color: white; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+      .summary { background: #f0f4f8; padding: 2rem; border-radius: 8px; margin-bottom: 2rem; border-left: 5px solid #1a365d; }
+      .metrics { display: flex; flex-wrap: wrap; gap: 1.5rem; margin: 2rem 0; }
+      .metric { background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); flex: 1; transition: all 0.3s ease; border-top: 4px solid #4a6fa5; }
+      .metric:hover { transform: translateY(-4px); box-shadow: 0 6px 12px rgba(0,0,0,0.15); }
+      .metric h3 { margin-top: 0; color: #1a365d; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem; }
+      .tactics { background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin: 2rem 0; }
+      .tactic-item { padding: 1rem; border-left: 3px solid #4a6fa5; margin-bottom: 1rem; background-color: #f8fafc; }
       .responses { margin-top: 3rem; }
-      .response { background: white; padding: 1.5rem; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 1rem; }
-      .question { font-weight: bold; margin-bottom: 1rem; }
-      .answer { margin-bottom: 1rem; }
-      .match { color: #38a169; }
-      .no-match { color: #e53e3e; }
-      .footer { text-align: center; padding: 2rem; color: #666; font-size: 0.8rem; }
+      .response { background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 1.5rem; transition: all 0.2s ease; }
+      .response:hover { box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+      .question { font-weight: bold; margin-bottom: 1rem; color: #1a365d; }
+      .answer { margin-bottom: 1rem; line-height: 1.6; }
+      .match { color: #38a169; background: #f0fff4; border-left: 3px solid #38a169; padding: 0.5rem; font-weight: 500; }
+      .no-match { color: #e53e3e; background: #fff5f5; border-left: 3px solid #e53e3e; padding: 0.5rem; font-weight: 500; }
+      .competitors { background: #f7fafc; padding: 1rem; border-radius: 5px; margin-top: 0.5rem; }
+      .competitor { display: inline-block; margin-right: 0.5rem; background: #e2e8f0; padding: 0.2rem 0.6rem; border-radius: 20px; font-size: 0.85rem; }
+      .footer { text-align: center; padding: 2rem; color: #666; font-size: 0.8rem; background: #f0f4f8; margin-top: 2rem; }
+      .presence-bar { height: 30px; background: #e2e8f0; border-radius: 15px; overflow: hidden; margin: 1rem 0; }
+      .presence-value { height: 100%; background: linear-gradient(90deg, #4a6fa5, #1a365d); text-align: right; padding-right: 10px; color: white; line-height: 30px; font-weight: bold; }
+      .chart-container { margin: 2rem 0; background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+      .competitor-bar { display: flex; align-items: center; margin-bottom: 1rem; }
+      .competitor-name { width: 150px; font-weight: bold; }
+      .competitor-value { flex-grow: 1; height: 25px; background: #e2e8f0; border-radius: 12px; overflow: hidden; }
+      .competitor-fill { height: 100%; background: linear-gradient(90deg, #63b3ed, #4299e1); }
+      .tag { display: inline-block; padding: 0.25rem 0.75rem; background: #e2e8f0; border-radius: 20px; margin-right: 0.5rem; margin-bottom: 0.5rem; font-size: 0.85rem; }
+      h2 { color: #1a365d; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem; }
+      .conclusion { background: #f0f4f8; padding: 1.5rem; border-radius: 8px; border-left: 5px solid #4a6fa5; margin: 2rem 0; font-style: italic; line-height: 1.6; }
     </style>
   </head>
   <body>
@@ -115,13 +130,53 @@ export async function generatePDFReport(
     <div class="container">
       <div class="summary">
         <h2>Resumen Ejecutivo</h2>
-        <p>${JSON.stringify(summary)}</p>
+        <p>${parsedSummary.conclusionExecutiva || "No se generó una conclusión ejecutiva."}</p>
       </div>
       
-      <h2>Análisis Detallado</h2>
+      <h2>Análisis de Visibilidad</h2>
+      
+      <div class="metrics">
+        <div class="metric">
+          <h3>Presencia de la Marca</h3>
+          <p>Tu marca aparece en aproximadamente ${parsedSummary.porcentajePresencia || "0"}% de las consultas analizadas.</p>
+          <div class="presence-bar">
+            <div class="presence-value" style="width: ${parsedSummary.porcentajePresencia || 0}%">${parsedSummary.porcentajePresencia || 0}%</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="chart-container">
+        <h3>Competidores Principales</h3>
+        ${(parsedSummary.competidores || []).map((comp: any, index: number) => {
+          const competitor = typeof comp === 'string' ? { nombre: comp, presencia: (100 - (parsedSummary.porcentajePresencia || 0)) / 3 } : comp;
+          return `
+          <div class="competitor-bar">
+            <div class="competitor-name">${competitor.nombre || `Competidor ${index+1}`}</div>
+            <div class="competitor-value">
+              <div class="competitor-fill" style="width: ${competitor.presencia || 15}%"></div>
+            </div>
+            <div style="width: 50px; text-align: right;">${competitor.presencia || "N/A"}%</div>
+          </div>
+          `;
+        }).join('')}
+      </div>
+      
+      <div class="tactics">
+        <h3>Tácticas Recomendadas</h3>
+        ${(parsedSummary.tacticasMejora || ["No se generaron tácticas específicas."]).map((tactica: string) => `
+          <div class="tactic-item">
+            <p>${tactica}</p>
+          </div>
+        `).join('')}
+      </div>
+      
+      <div class="conclusion">
+        <h3>Conclusión</h3>
+        <p>${parsedSummary.conclusionExecutiva || "No se generó una conclusión ejecutiva."}</p>
+      </div>
       
       <div class="responses">
-        <h2>Respuestas de ChatGPT Analizadas</h2>
+        <h2>Análisis Detallado de Respuestas</h2>
         ${responses.map(r => `
           <div class="response ${r.brand_match ? 'with-match' : ''}">
             <div class="question">${r.question_text}</div>
@@ -131,8 +186,13 @@ export async function generatePDFReport(
                 ? `✅ Marca mencionada` 
                 : `❌ Marca no mencionada`}
             </div>
-            ${r.competitor_matches.length > 0 
-              ? `<div>🔄 Competidores mencionados: ${r.competitor_matches.join(', ')}</div>` 
+            ${r.competitor_matches && r.competitor_matches.length > 0 
+              ? `
+              <div class="competitors">
+                <span>Competidores mencionados:</span>
+                ${r.competitor_matches.map((comp: string) => `<span class="competitor">${comp}</span>`).join(' ')}
+              </div>
+              ` 
               : ''}
           </div>
         `).join('')}

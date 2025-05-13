@@ -1,10 +1,10 @@
-
 import { ReactNode } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DownloadIcon, FileIcon, Loader2, Play, RefreshCw } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import ReportViewer from "./ReportViewer";
 
 export type ReportStatus = "processing" | "ready" | "error" | "pending";
 
@@ -213,13 +213,7 @@ const ReportCard = ({ report, onRetry, onProcessNextBatch, onProcessAllBatches }
         )}
         
         {status === "ready" && report.pdf_url && (
-          <Button 
-            onClick={() => window.open(report.pdf_url!, "_blank")}
-            className="w-full"
-          >
-            <FileIcon className="h-4 w-4 mr-2" />
-            Ver informe
-          </Button>
+          <ReportViewer reportUrl={report.pdf_url} brandName={report.brand_name} />
         )}
       </CardFooter>
     </Card>
