@@ -1,4 +1,3 @@
-
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.23.0';
 import { createClient as createStorageClient } from 'https://esm.sh/@supabase/storage-js@2.5.5';
@@ -11,7 +10,7 @@ const BATCH_SIZE = Number(Deno.env.get('BATCH_SIZE') || '20');
 const MAX_RETRIES = Number(Deno.env.get('MAX_RETRIES') || '3');
 const TEMPERATURE = Number(Deno.env.get('TEMPERATURE') || '0.3');
 const COST_LIMIT_EUR = Number(Deno.env.get('COST_LIMIT_EUR') || '20');
-const MIN_QUESTIONS = Number(Deno.env.get('MIN_QUESTIONS') || '50');
+const MIN_QUESTIONS = 50;
 const REQUIRED_QUESTIONS = 100;
 
 // Rate for cost calculation (adjust based on model)
@@ -80,7 +79,7 @@ async function callOpenAI(prompt: string, systemPrompt: string): Promise<{ text:
 // Generate questions based on brand and competitors
 async function generateQuestions(brand: string, competitors: string[]): Promise<string[]> {
   const competitorsStr = competitors.join(', ');
-  const prompt = `Crea preguntas que un usuario real podría hacer en ChatGPT donde, de forma natural, aparezca la marca ${brand} o alguno de sus competidores (${competitorsStr}). Genera tantas como puedas, idealmente 100 preguntas.`;
+  const prompt = `Crea preguntas que un usuario real podría hacer en ChatGPT donde, de forma natural, aparezca la marca ${brand} o alguno de sus competidores (${competitorsStr}). Genera al menos ${MIN_QUESTIONS} preguntas, idealmente ${REQUIRED_QUESTIONS} preguntas.`;
   const systemPrompt = "Eres experto en branding e IA. Devuelve un JSON array con las preguntas.";
   
   const { text, tokens } = await withRetry(() => callOpenAI(prompt, systemPrompt), MAX_RETRIES);
@@ -610,7 +609,7 @@ async function calculateMetrics(questionnaireId: string): Promise<{ totalTokens:
 
 // Process questionnaire - Modified to be more resilient
 async function processQuestionnaire(questionnaireId: string): Promise<void> {
-  console.log(`Processing questionnaire: ${questionnaireId}`);
+  console.log(`[V2] Processing questionnaire: ${questionnaireId}`);
   
   // Update questionnaire status to processing
   await supabase
@@ -792,11 +791,11 @@ async function processQuestionnaire(questionnaireId: string): Promise<void> {
         })
         .eq('id', questionnaireId);
         
-      console.log(`Questionnaire ${questionnaireId} partial completion: ${completedBatches?.length || 0}/${totalBatches?.length || 0} batches`);
+      console.log(`[V2] Questionnaire ${questionnaireId} partial completion: ${completedBatches?.length || 0}/${totalBatches?.length || 0} batches`);
     }
     
   } catch (error) {
-    console.error(`Error processing questionnaire: ${error}`);
+    console.error(`[V2] Error processing questionnaire: ${error}`);
     
     // Update questionnaire status to error
     await supabase
@@ -828,6 +827,8 @@ serve(async (req) => {
       );
     }
     
+    console.log(`[V2] Starting processing for questionnaire: ${questionnaireId}`);
+    
     // Start processing in the background
     EdgeRuntime.waitUntil(processQuestionnaire(questionnaireId));
     
@@ -838,7 +839,7 @@ serve(async (req) => {
     );
     
   } catch (error) {
-    console.error('Error:', error);
+    console.error('[V2] Error:', error);
     
     return new Response(
       JSON.stringify({ error: error.message || 'Unknown error' }),

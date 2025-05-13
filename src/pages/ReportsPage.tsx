@@ -76,7 +76,7 @@ const ReportsPage = () => {
         .update({ status: 'pending', error_message: null })
         .eq('id', reportId);
 
-      // Trigger the NEW report generation edge function
+      // Trigger the NEW report generation edge function - Always use V2
       const { error: functionError } = await supabase.functions.invoke('generar-reporte-chatgpt-v2', {
         body: { questionnaireId: reportId }
       });

@@ -40,6 +40,18 @@ interface ReportCardProps {
 }
 
 const ReportCard = ({ report, onRetry }: ReportCardProps) => {
+  // Function to format date in a more user-friendly way
+  const formatDate = (dateString: string) => {
+    const options: Intl.DateTimeFormatOptions = { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    };
+    return new Date(dateString).toLocaleDateString(undefined, options);
+  };
+
   return (
     <Card key={report.id} className="h-full flex flex-col">
       <CardHeader>
@@ -55,7 +67,7 @@ const ReportCard = ({ report, onRetry }: ReportCardProps) => {
           </Badge>
         </div>
         <CardDescription>
-          Creado el {new Date(report.created_at).toLocaleDateString()}
+          Creado el {formatDate(report.created_at)}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-grow">
@@ -83,7 +95,7 @@ const ReportCard = ({ report, onRetry }: ReportCardProps) => {
             className="w-full"
           >
             <RefreshCw className="h-4 w-4 mr-2" />
-            Reintentar
+            Reintentar con V2
           </Button>
         )}
         {report.status === "processing" && (
